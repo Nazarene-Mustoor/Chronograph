@@ -1,4 +1,34 @@
+# Python virtual environments & bytecode
 venv/
-.env
+.venv/
 __pycache__/
-*.pyc
+*.py[cod]
+*$py.class
+*.so
+
+# Environment secrets
+.env
+.env.*
+
+# Reflex builds, states & SQLite databases
+.web/
+.states/
+assets/external/
+*.db
+*.sqlite
+*.sqlite3
+reflex.db
+app/reflex.db
+
+# Scraped raw archives & logs (keep directory structure intact)
+data/raw_news/*
+!data/raw_news/.gitkeep
+data/processed_news/*
+!data/processed_news/.gitkeep
+data/*.txt
+logs/
+*.log
+
+# OS artifacts
+.DS_Store
+Thumbs.db

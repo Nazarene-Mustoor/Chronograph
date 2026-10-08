@@ -1,0 +1,19 @@
+version: '3.8'
+
+services:
+  chronograph:
+    build: .
+    container_name: chronograph_app
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+      - "8002:8002"
+      - "3000:3000"
+    env_file:
+      - .env
+    volumes:
+      - ./data:/app/data
+      - sqlite_data:/app/.reflex
+
+volumes:
+  sqlite_data:

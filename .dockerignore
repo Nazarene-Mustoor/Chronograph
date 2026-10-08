@@ -1,0 +1,17 @@
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.env
+.env.*
+.web/
+node_modules/
+.git/
+.github/
+*.db
+*.sqlite3
+data/raw_news/*
+!data/raw_news/.gitkeep
+data/processed_news/*
+!data/processed_news/.gitkeep
+logs/
