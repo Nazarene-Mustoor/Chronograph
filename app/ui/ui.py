@@ -415,16 +415,21 @@ def seed_default_tickets():
     ]
     try:
         with rx.session() as session:
-            # Create the table if it does not exist in the fresh cloud container
             SQLModel.metadata.create_all(session.get_bind())
 
             existing = session.exec(select(BackfillTicket)).first()
             if not existing:
-                for code, title, detail, votes in seeds:
-                    session.add(BackfillTicket(ticket_code=code, title=title, detail=detail, votes=votes, status="queued"))
+                for code, title, detail, votes, status in seeds:
+                    session.add(BackfillTicket(
+                        ticket_code=code,
+                        title=title,
+                        detail=detail,
+                        votes=votes,
+                        status=status
+                    ))
                 session.commit()
-    except Exception:
-        pass
+    except Exception as e:
+        print(f"❌ Ticket Seeding Error: {e}")
 
 def empty_telemetry_placeholder() -> rx.Component:
     """Telemetry placeholder rendered in the center column before queries run."""
