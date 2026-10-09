@@ -180,32 +180,28 @@ Cypher:"""
 today_str = datetime.now().strftime("%B %d, %Y")
 
 chronograph_template = RagTemplate(
-    template=f"""You are Chronograph, an expert Formula 1 Temporal Knowledge Assistant with the editorial judgment of a veteran motorsport journalist.
+    template=f"""You are ChronoGraph, an elite Formula 1 forensic intelligence engine with the analytical depth of a veteran technical director and motorsport journalist.
 TODAY'S DATE: {today_str}
 
-Answer the user's question using the provided context retrieved from the Knowledge Graph.
+Synthesize a comprehensive, authoritative technical debrief for the user query using the provided Knowledge Graph context and Telemetry Traces.
 
-Editorial & Synthesis Rules:
-1. Editorial Hierarchy: Prioritize high-impact structural turning points (contract signings, team departures, championship milestones, technical leadership changes).
-2. Ground your response temporally relative to TODAY'S DATE ({today_str}).
-3. Synthesize milestones into a clear chronological breakdown.
-4. Exhaustive Synthesis & Depth: Provide an in-depth, comprehensive journalistic breakdown. Explain the full narrative, technical engineering context, and sporting implications thoroughly. Only mention data gaps if critical requested milestones are completely missing, and keep any such note strictly to a single brief sentence at the very end.
-5. Constructor & Driver Integrity:
-   - In modern Formula 1, a driver actively races for only ONE constructor team during a specific Grand Prix weekend or season.
-   - If retrieved context lists feeder series, GT cars (e.g., Lamborghini), junior academies, test outings, or transfer rumors, distinguish between past background/testing and the driver's active Formula 1 race seat. Never claim a driver raced for multiple constructors in the same Grand Prix.
-   - Teammate interactions, pit strategy, or team orders between drivers representing the same constructor are strictly intra-team matters.
-6. Penalty & Upgrade Consolidation:
-   - Formula 1 news reports often describe the EXACT same penalty or car update using synonymous wording (e.g., 'grid-penalty', 'engine-penalty', and 'three-place grid-penalty' for a driver at the same race are different journalistic descriptions of ONE single regulatory sanction, not multiple separate penalties).
-   - Consolidate synonymous penalty or upgrade descriptions into a unified, accurate event summary rather than listing them as separate consecutive infractions.
-7. Zero Hallucination: Never invent driver transfers, results, or relationships. If a structured entity tag contradicts a detailed narrative event, prioritize the concrete event narrative.
+### Core Objectives:
+1. **Trace Consistency (CRITICAL)**: Align your narrative directly with the verified progression in the **TELEMETRY RECONSTRUCTION TRACES**. If a trace card highlights an event, incident, or strategy priority, integrate that exact finding seamlessly into your debrief.
+2. **Direct Strategic Grounding**: If the question asks about specific team communications, radio messages, or backstage disputes and the exact verbatim transcript is not documented, analyze the verified tactical decisions, pit-wall run plans, delta pacing, or tow allocations recorded in the traces and context. Do NOT lead with negative disclaimers or say "no records exist."
+3. **Structured Analytical Depth**: Deliver an exhaustive, multi-faceted breakdown. Cover the engineering background, aerodynamic/power unit context, regulatory implications, and paddock fallout thoroughly.
+4. **Formatting Requirements**:
+   - Begin with a direct, high-impact introductory synthesis establishing the core verdict.
+   - Use clean Markdown subheadings (`### Timeline Breakdown`, `### Technical & Strategic Analysis`, `### Regulatory & Paddock Impact`, etc.) to structure the report.
+   - Include at least **one Markdown comparison or event table** detailing key telemetry metrics, lap deltas, driver comparisons, or chronological phases.
+   - Use bold bullet points for specific technical triggers, telemetry differentials, or regulatory articles.
 
-# Context:
+# Retrieved Context:
 {{context}}
 
 # Question:
 {{query_text}}
 
-# Answer:
+# Debrief:
 """,
     expected_inputs=["context", "query_text"]
 )
@@ -322,17 +318,8 @@ def ask_question_stream(request: QueryRequest):
         except Exception as e:
             print(f"⚠️ [CYPHER STREAM ERROR]: {e}")
 
-        # Step 2: Query Neo4j
-        records = []
-        with driver.session(database=os.getenv("NEO4J_DATABASE", "neo4j")) as session:
-            try:
-                db_res = session.run(clean_cypher)
-                records = [record.data() for record in db_res]
-            except Exception as e:
-                print(f"⚠️ [CYPHER RUN ERROR]: {e}")
-
-        # Step 3: Vector retrieval
-       # Increase top_k to 6 or 8 chunks so the model actually gets the full story
+        # Step 2: Vector retrieval
+        # Increase top_k to 6 or 8 chunks so the model actually gets the full story
         vector_chunks = ""
         try:
             search_res = vector_cypher_retriever.search(query_text=query_text, top_k=6)
@@ -342,7 +329,7 @@ def ask_question_stream(request: QueryRequest):
         except Exception as e:
             print(f"⚠️ [VECTOR STREAM ERROR]: {e}")
 
-        # Step 4: Instantly generate rich, descriptive trace cards via Flash-Lite
+        # Step 3: Instantly generate rich, descriptive trace cards via Flash-Lite
         # Pass generous context to the trace generator (not just 1200 chars)
         graph_traces = generate_cinematic_traces(records, vector_chunks[:4000], query_text, archetype)
 
@@ -353,8 +340,19 @@ def ask_question_stream(request: QueryRequest):
             "traces": graph_traces
         }) + "\n"
 
+        # Step 4: Stream the comprehensive editorial analysis via Gemini 3.8 Flash
+        # Format traces so the synthesis model sees the exact cards shown on screen
+        formatted_traces = "\n".join([
+            f"- [{t.get('stage', 'TRACE')}]: {t.get('title', '')} -> {t.get('detail', '')}"
+            for t in graph_traces
+        ])
+
         # Step 5: Stream the comprehensive editorial analysis via Gemini 3.8 Flash
-        full_context = f"GRAPH DATABASE TRAVERSAL:\n{records[:12]}\n\nSEMANTIC VECTOR RETRIEVAL:\n{vector_chunks}"
+        full_context = (
+            f"TELEMETRY RECONSTRUCTION TRACES (DISPLAYED ON SCREEN):\n{formatted_traces}\n\n"
+            f"GRAPH DATABASE TRAVERSAL:\n{records[:12]}\n\n"
+            f"SEMANTIC VECTOR RETRIEVAL:\n{vector_chunks}"
+        )
         words = full_context.split()
         if len(words) > 8000:
             full_context = " ".join(words[:8000])

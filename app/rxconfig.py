@@ -5,6 +5,7 @@ config = rx.Config(
     app_name="ui",
     api_url=os.getenv("REFLEX_API_URL", "http://localhost:8002"),
     backend_port=8002,
+    prerender=False,
     plugins=[
         rx.plugins.SitemapPlugin(),
         rx.plugins.TailwindV4Plugin(),

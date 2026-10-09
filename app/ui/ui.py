@@ -65,26 +65,26 @@ class State(rx.State):
 
 
     example_queries: list[str] = [
-        # 1. CAUSAL_CONSEQUENCE_CHAIN (Verified in graph: Austria 2024 collision telemetry)
-        "How did the lap 64 Verstappen-Norris collision in Austria hand George Russell an unexpected win?",
+        # 1. CAUSAL_CONSEQUENCE_CHAIN (2026 FIA Software Glitch & Human Error)
+        "How did the 2026 FIA timing and telemetry software failure cascade into widespread paddock confusion, and what did the post-session human error audit reveal?",
 
-        # 2. TEMPORAL_EVOLUTION (Verified in graph: 2022 Piastri Alpine contract fallout)
-        "Show the step-by-step chronological progression of the 2022 Alpine-Piastri contract dispute.",
+        # 2. EPISTEMIC_PERCEPTION_SHIFT (2026 Rotating 'Macarena Wing' Legality)
+        "How did the paddock debate over the rotating 'Macarena wing' shift from an aero gray area into formal FIA scrutiny and technical clarification?",
 
-        # 3. EPISTEMIC_PERCEPTION_SHIFT (Verified in graph: 2026 Rotating 'Macarena Wing' Legality)
-        "How did the paddock debate over the 'Macarena wing' shift from an aero gray area into formal FIA scrutiny?",
+        # 3. TEMPORAL_EVOLUTION (Franco Colapinto Paddock Trajectory & Scrutiny)
+        "Show the chronological progression of Franco Colapinto's F1 journey from his rookie breakthrough into intense public scrutiny and critical fan discourse.",
 
-        # 4. COMPARATIVE_TRAJECTORY (Verified in graph: McLaren 2024 floor upgrades vs Red Bull balance)
-        "Compare McLaren's development surge with Mercedes' car development struggles across the ground-effect era, focusing on their contrasting paths.",
+        # 4. COMPARATIVE_TRAJECTORY (McLaren vs Mercedes Development Paths)
+        "Compare McLaren's development surge from their 2024 aero packages through 2026 with Mercedes' recurring car balance struggles.",
 
-        # 5. TRANSITION_INFLECTION_POINT (Verified in graph: Ricciardo wrist injury at Zandvoort)
-        "When did Verstappen stop being Red Bull's second driver and become its clear team leader?",
+        # 5. TRANSITION_INFLECTION_POINT (Team Dynamics & Leadership Shifts)
+        "Identify the operational inflection point at McLaren where intra-team battles necessitated the enforcement of formal 'Papaya Rules' team order protocols.",
 
-        # 6. MULTIHOP_LINEAGE (Verified in graph: 2008 Singapore Crashgate Conspiracy dominoes)
-        "Map the multi-hop lineage connecting Daniel Ricciardo's 2023 injury to Liam Lawson's 2026 Red Bull seat, tracing each intermediate team trigger and driver replacement.",
+        # 6. MULTIHOP_LINEAGE (Recent driver market dominoes)
+        "Map the multi-hop lineage connecting Daniel Ricciardo's 2023 injury through Liam Lawson's interim drives to the eventual 2025–2026 Red Bull seat decisions.",
 
-        # 7. FACTUAL_LOOKUP (Verified in graph: 2021 Abu Dhabi Article 48.12)
-        "What exact reason did Ferrari give over team radio to Lewis Hamilton explaining why Charles Leclerc was prioritized at the 2026 Dutch Grand Prix?",
+        # 7. FACTUAL_LOOKUP (Ferrari Tow & Qualifying Run Plan Allocation)
+        "How did Ferrari's qualifying run plan and aerodynamic tow allocation prioritize Charles Leclerc over Lewis Hamilton at the 2026 Dutch Grand Prix?",
     ]
 
     def use_example(self, query: str):
@@ -102,8 +102,7 @@ class State(rx.State):
             return
         self.query = self.follow_up_query
         self.follow_up_query = ""
-        async for step in self.investigate():
-            yield step
+        return State.investigate
 
     def handle_follow_up_key_down(self, key: str):
         if key == "Enter":
@@ -133,25 +132,26 @@ class State(rx.State):
             self.selected_node = selected
             yield
     
+    @rx.event(background=True)
     async def investigate(self):
         if not self.query.strip() or self.quota_reached:
             return
 
-        self.loading = True
-        self.trace_nodes = []
-        self.selected_node = None
-        self.answer = ""
-        self.answer_preview = ""
-        self.archetype = ""
-        yield
+        async with self:
+            self.loading = True
+            self.trace_nodes = []
+            self.selected_node = None
+            self.answer = ""
+            self.answer_preview = ""
+            self.archetype = ""
 
-        # Deduct quota on run
-        now = time.time()
-        if not self.is_dev:
-            if self.first_query_time == 0 or (now - self.first_query_time) > self.cooldown_seconds:
-                self.first_query_time = now
-                self.query_count = 0
-            self.query_count += 1
+            # Deduct quota on run
+            now = time.time()
+            if not self.is_dev:
+                if self.first_query_time == 0 or (now - self.first_query_time) > self.cooldown_seconds:
+                    self.first_query_time = now
+                    self.query_count = 0
+                self.query_count += 1
 
         try:
             api_base = os.getenv("CHRONOGRAPH_API_URL", "http://127.0.0.1:8000")
@@ -166,43 +166,46 @@ class State(rx.State):
 
                         # Event 1: Telemetry and traces arrived from Neo4j
                         if packet.get("type") == "telemetry":
-                            self.archetype = packet.get("archetype", "FACTUAL_LOOKUP")
-                            backend_traces = packet.get("traces", [])
-                            self.trace_nodes = [TraceNode(**t) for t in backend_traces]
-                            if self.trace_nodes:
-                                self.selected_node = self.trace_nodes[0]
-                            self.answer_expanded = False
-                            yield  # Traces appear instantly on the Pit Wall
+                            async with self:
+                                self.archetype = packet.get("archetype", "FACTUAL_LOOKUP")
+                                backend_traces = packet.get("traces", [])
+                                self.trace_nodes = [TraceNode(**t) for t in backend_traces]
+                                if self.trace_nodes:
+                                    self.selected_node = self.trace_nodes[0]
+                                self.answer_expanded = False
 
                         # Event 2: Answer text streaming token-by-token (live typing)
                         elif packet.get("type") == "token":
-                            self.answer += packet.get("content", "")
+                            async with self:
+                                self.answer += packet.get("content", "")
 
-                            # Extract only the opening executive summary for preview
-                            # Split by double newline to find distinct paragraphs
-                            clean_parts = [
-                                p.strip()
-                                for p in self.answer.split("\n\n")
-                                if p.strip() and not p.strip().startswith("#")
-                            ]
-                            
-                            if clean_parts:
-                                # Show only the first paragraph (up to ~320 chars) in collapsed mode
-                                self.answer_preview = clean_parts[0][:320] + ("..." if len(clean_parts[0]) > 320 or len(clean_parts) > 1 else "")
-                            else:
-                                self.answer_preview = self.answer[:320]
-
-                            yield
+                                # Extract only the opening executive summary for preview
+                                clean_parts = [
+                                    p.strip()
+                                    for p in self.answer.split("\n\n")
+                                    if p.strip() and not p.strip().startswith("#")
+                                ]
+                                
+                                if clean_parts:
+                                    if len(clean_parts[0]) > 320:
+                                        self.answer_preview = clean_parts[0][:320] + "..."
+                                    elif len(clean_parts) > 1:
+                                        self.answer_preview = clean_parts[0] + "..."
+                                    else:
+                                        self.answer_preview = clean_parts[0]
+                                else:
+                                    self.answer_preview = self.answer[:320]
 
         except Exception as e:
             import traceback
             traceback.print_exc()
-            self.archetype = "SYSTEM_BUSY"
-            self.answer = "**Couldn't complete that investigation.** Please try again shortly."
-            self.answer_preview = self.answer
+            async with self:
+                self.archetype = "SYSTEM_BUSY"
+                self.answer = "**Couldn't complete that investigation.** Please try again shortly."
+                self.answer_preview = self.answer
         finally:
-            self.loading = False
-            yield
+            async with self:
+                self.loading = False
 
     def handle_key_down(self, key: str):
         if key == "Enter":
@@ -289,6 +292,9 @@ class State(rx.State):
         _ = self.queue_version
 
         with rx.session() as session:
+            # Ensure table exists before executing select
+            SQLModel.metadata.create_all(session.get_bind())
+
             stmt = select(BackfillTicket).where(BackfillTicket.status != "deleted")
             
             # Sort order
@@ -400,15 +406,18 @@ class State(rx.State):
     
 def seed_default_tickets():
     seeds = [
-        ("#55", "2021 Abu Dhabi 'No Michael No!'", "Article 48.12 safety car restart controversy and telemetry delta on the final lap.", 89),
-        ("#48", "2020 Racing Point 'Pink Mercedes' Protest", "Renault's brake duct legality dispute and FIA CAD data tracing under Appendix 6.", 74),
-        ("#42", "2022 Ferrari 'We Are Checking... Plan E'", "Silverstone hard-tyre strategy breakdown that stranded Charles Leclerc in P4.", 62),
-        ("#36", "2016 Spain: Hamilton & Rosberg Turn 4 Crash", "Engine mode mismatch telemetry and the first-lap collision that crowned Max Verstappen.", 53),
-        ("#30", "2008 Singapore 'Crashgate' Conspiracy", "Nelson Piquet Jr's deliberate lap 14 Turn 17 wall impact and telemetry audit.", 47),
-        ("#24", "2018 'Kimi, You Will Not Have The Drink'", "Cockpit cooling valve failure, dehydration g-force logs, and Hungaroring telemetry.", 38),
+        ("#58", "2024 Austin: Norris vs Verstappen Turn 12 Penalty", "Track limits off-track overtake dispute, driving standards guidelines, and McLaren right-of-review petition.", 94, "queued"),
+        ("#51", "2024 Hungary: McLaren 'Papaya Rules' Radio Drama", "Lando Norris pit-undercut sequence on Oscar Piastri and the 20-lap team radio standoff before the swap.", 81, "queued"),
+        ("#46", "2024 Red Bull RB20 T-Tray Ride-Height Device", "Scrutineering dispute in Austin regarding front bib clearance adjustments in Parc Fermé under FIA seals.", 68, "queued"),
+        ("#42", "2024 Baku: McLaren Rear-Wing 'Mini-DRS' Flexing", "High-speed slot gap deflection telemetry and FIA technical directive triggering low-downforce flap revisions.", 55, "ingested"),
+        ("#38", "2025 Hamilton Ferrari Debut & Steering Drift", "Melbourne cockpit ergonomic shifts, differential transition mappings, and radio debrief telemetry.", 44, "queued"),
+        ("#31", "2024 Belgian GP: Russell 1.5kg Underweight Disqualification", "One-stop strategy tyre wear calculation error, fuel drain protocol, and FIA document 45.", 37, "queued"),
     ]
     try:
         with rx.session() as session:
+            # Create the table if it does not exist in the fresh cloud container
+            SQLModel.metadata.create_all(session.get_bind())
+
             existing = session.exec(select(BackfillTicket)).first()
             if not existing:
                 for code, title, detail, votes in seeds:

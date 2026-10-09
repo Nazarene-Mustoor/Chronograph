@@ -1,0 +1,6 @@
+﻿reflex
+httpx
+sqlmodel
+greenlet
+alembic
+sqlalchemy
