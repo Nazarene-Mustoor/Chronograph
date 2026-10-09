@@ -13,7 +13,7 @@ from typing import List, Optional, Dict, Any
 from dotenv import load_dotenv
 
 from fastapi import FastAPI, HTTPException, status
-from fastapi.responses import StreamingResponse
+from fastapi.responses import StreamingResponse, PlainTextResponse
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 from openai import OpenAI, RateLimitError, APIError
@@ -231,6 +231,11 @@ def health_check():
         return {"status": "healthy", "neo4j": "connected", "primary_model": PRIMARY_MODEL, "fallback_model": FALLBACK_MODEL}
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Health check failed: {str(e)}")
+    
+@app.api_route("/ping", methods=["GET", "HEAD"])
+def ping():
+    """Ultra-lightweight keep-alive endpoint for cron pings."""
+    return {"status": "ok"}
     
 TRACE_SYNTH_PROMPT = """You are ChronoGraph Telemetry Engine.
 Convert the retrieved F1 Graph Facts into 3 to 5 structured timeline trace cards representing the '{archetype}' archetype for the query: "{query}".
