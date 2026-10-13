@@ -1285,5 +1285,12 @@ def index() -> rx.Component:
     )
 
 
-app = rx.App()
-app.add_page(index, on_load = State.on_load)
+app = rx.App(
+    head_components=[
+        rx.el.meta(
+            name="viewport",
+            content="width=1280",
+        ),
+    ]
+)
+app.add_page(index, on_load=State.on_load)
