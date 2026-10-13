@@ -92,6 +92,8 @@ chronograph/
 ├── Dockerfile                  # Container definition
 ├── docker-compose.yml          # Multi-container setup (Neo4j + ChronoGraph)
 └── .env.example                # Configuration template
+```
+
 📍 System Status & Milestones
 [x] Graph Database Schema: Neo4j constraints for Drivers, Constructors, Grand Prix, and Technical Directives
 
