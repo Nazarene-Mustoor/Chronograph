@@ -43,24 +43,24 @@ F1 is an evolving technical ecosystem where answers depend on **when** an event 
 
 ChronoGraph runs a dual-branch parallel retrieval architecture to balance structural relationships with narrative reporting:
 
-[ User Query ]
-│
-▼
-[ FastAPI Backend /api.py ]
-│
-├───▶ Branch 1: Text2Cypher Graph Traversal (Structural facts, tenures, lineages)
-│
-├───▶ Branch 2: VectorCypher Semantic Retrieval (Narrative context, reporting, quotes)
-│
-▼
-[ Parallel Aggregation & Synthesis Engine ]
-│
-├───▶ 1. Flash-Lite Synthesizes Reconstruction Trace (~1.2s)
-│      └─▶ [EMIT TELEMETRY PACKET] ──▶ Reflex UI renders Pit Wall Timeline
-│
-└───▶ 2. Gemini 3.8 Flash Streams Full Investigation Report (Token-by-Token)
-└─▶ [EMIT TOKEN STREAM] ────▶ Reflex UI streams editorial text live
+ChronoGraph uses an asynchronous **NDJSON Progressive Pipeline** to eliminate perceived LLM latency:
 
+```
+[ User Query ]
+       │
+       ▼
+[ FastAPI Backend /api.py ]
+       │
+       ├───▶ 1. Cypher Graph Traversal + Vector Search (Neo4j)
+       │
+       ├───▶ 2. Flash-Lite Synthesizes Cinematic Timeline Cards (~1.2s)
+       │      │
+       │      └─▶ [EMIT TELEMETRY PACKET] ──▶ Reflex UI renders "Pit Wall" immediately!
+       │
+       └───▶ 3. Gemini 3.8 Flash Streams Full Investigation Report (Token-by-Token)
+              │
+              └─▶ [EMIT TOKEN STREAM] ────▶ Reflex UI streams editorial text live
+```
 
 ---
 
