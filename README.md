@@ -92,47 +92,51 @@ chronograph/
 ├── Dockerfile                  # Container definition
 ├── docker-compose.yml          # Multi-container setup (Neo4j + ChronoGraph)
 └── .env.example                # Configuration template
-```
+## 📍 System Status & Progress
+- [x] **Graph Database Schema:** Neo4j constraints for Drivers, Constructors, Grand Prix, and Technical Directives
 
-📍 System Status & Milestones
-[x] Graph Database Schema: Neo4j constraints for Drivers, Constructors, Grand Prix, and Technical Directives
+- [x] **Curated Milestone Seed:** 25 defining historical milestones ingested across 2021–2025 (Abu Dhabi '21, 2022 ground effect reset, Piastri saga, cost-cap breach, Zandvoort injury, etc.)
 
-[x] Curated Milestone Seed: 25 defining historical milestones ingested across 2021–2025 (Abu Dhabi '21, 2022 ground effect reset, Piastri saga, cost-cap breach, Zandvoort injury, etc.)
+- [x] **Benchmark Evaluation Suite:** 42-query test suite passing across all 7 investigation archetypes
 
-[x] Benchmark Evaluation Suite: 42-query test suite passing across all 7 investigation archetypes
+- [x] **Parallel Retrieval Engine:** Dual-branch execution combining Text2Cypher structural queries with VectorCypher semantic chunking
 
-[x] Parallel Retrieval Engine: Dual-branch execution combining Text2Cypher structural queries with VectorCypher semantic chunking
+- [x] **Zero-Latency Telemetry Streaming:** Instant Pit Wall timeline rendering via NDJSON packets
 
-[x] Zero-Latency Telemetry Streaming: Instant Pit Wall timeline rendering via NDJSON packets
+- [x] **Resilient Ingestion & Recovery:** hydrate_chunks.py fallback utility for rebuilding semantic layers directly from raw graph entities
 
-[x] Resilient Ingestion & Recovery: hydrate_chunks.py fallback utility for rebuilding semantic layers directly from raw graph entities
+- [x] **On-Demand Backfill Engine:** Interactive queue and CLI scraper to ingest community-voted historical events directly into the active graph
 
-[x] On-Demand Backfill Engine: Interactive queue and CLI scraper to ingest community-voted historical events directly into the active graph
+---
 
-🎯 The 7 Supported Analytical Archetypes
+## 🎯 The 7 Supported Analytical Archetypes
 ChronoGraph classifies inquiries into 7 distinct investigative archetypes:
 
-Epistemic Perception Shift: Maps how paddock consensus transformed from initial loophole exploitation to formal FIA intervention.
+1. **Epistemic Perception Shift:** Maps how paddock consensus transformed from initial loophole exploitation to formal FIA intervention.
 
-Causal Consequence Chain: Traces how a single racing incident cascaded into penalty points, contractual disputes, and constructor standings (e.g., Austria 2024 Lap 64).
+2. **Causal Consequence Chain:** Traces how a single racing incident cascaded into penalty points, contractual disputes, and constructor standings (e.g., Austria 2024 Lap 64).
 
-Temporal Evolution: Chronological breakdown tracking technical upgrades or team lineup evolution across seasons.
+3. **Temporal Evolution:** Chronological breakdown tracking technical upgrades or team lineup evolution across seasons.
 
-Multihop Lineage: Maps driver career progressions, junior academy promotions, and reserve driver call-ups across teams.
+4. **Multihop Lineage:** Maps driver career progressions, junior academy promotions, and reserve driver call-ups across teams.
 
-Regulatory Impact Analysis: Traces how specific Technical Directives altered competitive performance and aero concepts.
+5. **Regulatory Impact Analysis:** Traces how specific Technical Directives altered competitive performance and aero concepts.
 
-Contradiction & Dispute Resolution: Synthesizes competing steward rulings and telemetry statements across controversial stewarding decisions.
+6. **Contradiction & Dispute Resolution:** Synthesizes competing steward rulings and telemetry statements across controversial stewarding decisions.
 
-Cross-Season Lineup Dynamics: Reconstructs complex multi-year contractual shifts, buyouts, and team principal transitions.
+7. **Cross-Season Lineup Dynamics:** Reconstructs complex multi-year contractual shifts, buyouts, and team principal transitions.
 
-🔧 How to Run Locally
-1. Clone the Repository
-Bash
-git clone [https://github.com/Nazarene-Mustoor/Chronograph.git](https://github.com/Nazarene-Mustoor/Chronograph.git)
+--- 
+
+## 🔧 How to Run Locally
+
+### 1. Clone the Repository
+```bash
+git clone https://github.com/Nazarene-Mustoor/Chronograph.git
 cd Chronograph
-2. Set Up Virtual Environment & Dependencies
-Bash
+```
+### 2. Set Up Virtual Environment & Dependencies
+```bash
 python -m venv venv
 # Windows:
 venv\Scripts\activate
@@ -140,39 +144,45 @@ venv\Scripts\activate
 source venv/bin/activate
 
 pip install -r requirements.txt
-3. Configure Environment Variables
+```
+
+### 3. Configure Environment Variables
 Copy the template and add your credentials:
-
-Bash
+```bash
 cp .env.example .env
-Ensure your .env contains:
-
-Code snippet
+```
+Ensure your `.env` contains:
+```env
 NEO4J_URI=bolt://localhost:7687
 NEO4J_USERNAME=neo4j
 NEO4J_PASSWORD=your_password_here
 NEO4J_DATABASE=neo4j
 
 GEMINI_API_KEY=your_gemini_api_key_here
-OPENAI_API_BASE=[https://generativelanguage.googleapis.com/v1beta/openai/](https://generativelanguage.googleapis.com/v1beta/openai/)
-4. Seed the Knowledge Graph (First Run)
-Bash
-# Seed curated 2021-2025 catalyst milestones
+OPENAI_API_BASE=https://generativelanguage.googleapis.com/v1beta/openai/
+```
+
+### 4. Seed the Knowledge Graph (Optional / First Run)
+```bash
+# Seed 2018-2026 archive
 python history_backfill.py
 
 # Build graph entities & vector embeddings
 python ingestion_pipeline.py
-5. Run the Benchmark Suite
-Bash
-# Run the 42-query validation test across all 7 archetypes
-python run_benchmark_queries.py
-6. Launch the Application
-In Terminal 1 (Backend API):
+```
 
-Bash
+### 5. Launch the Application
+
+In **Terminal 1** (Backend API):
+```bash
 uvicorn api:app --reload --port 8000
-In Terminal 2 (Reflex Dashboard):
+```
 
-Bash
+In **Terminal 2** (Reflex Dashboard):
+```bash
 reflex run
-Open your browser at http://localhost:3000 to access ChronoGraph.
+```
+
+Open your browser at `http://localhost:3000` to access ChronoGraph.
+
+---
