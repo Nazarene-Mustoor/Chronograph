@@ -194,6 +194,7 @@ Synthesize a comprehensive, authoritative technical debrief for the user query u
    - Use clean Markdown subheadings (`### Timeline Breakdown`, `### Technical & Strategic Analysis`, `### Regulatory & Paddock Impact`, etc.) to structure the report.
    - Include at least **one Markdown comparison or event table** detailing key telemetry metrics, lap deltas, driver comparisons, or chronological phases.
    - Use bold bullet points for specific technical triggers, telemetry differentials, or regulatory articles.
+   - **STRICT PROHIBITION ON ASCII DIAGRAMS**: DO NOT draw ASCII boxes, pseudo-code flowcharts, character-art trees, or wireframes (e.g., using `+---`, `|`, `+`, `v`). They break viewport rendering on mobile screens and look like unrendered source code. Format all structural hierarchies, system pillars, and sequences exclusively using standard Markdown Tables or bold nested lists.
 
 # Retrieved Context:
 {{context}}
