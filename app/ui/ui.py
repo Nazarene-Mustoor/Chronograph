@@ -297,11 +297,18 @@ class State(rx.State):
 
             stmt = select(BackfillTicket).where(BackfillTicket.status != "deleted")
             
-            # Sort order
+            # Sort order: active queued tickets first, then sort by votes / recent
             if self.queue_filter == "recent":
-                stmt = stmt.order_by(desc(BackfillTicket.id))
+                stmt = stmt.order_by(
+                    BackfillTicket.status.desc(),  # "queued" comes before "ingested" alphabetically
+                    desc(BackfillTicket.id),
+                )
             else:
-                stmt = stmt.order_by(desc(BackfillTicket.votes), desc(BackfillTicket.id))
+                stmt = stmt.order_by(
+                    BackfillTicket.status.desc(),  # "queued" comes before "ingested"
+                    desc(BackfillTicket.votes),
+                    desc(BackfillTicket.id),
+                )
 
             # Cap unless dev mode or user expanded 'show_all'
             if not self.is_dev and not self.show_all_tickets:
@@ -338,7 +345,7 @@ class State(rx.State):
             ticket = session.exec(
                 select(BackfillTicket).where(BackfillTicket.ticket_code == ticket_id)
             ).first()
-            if ticket:
+            if ticket and ticket.status != "ingested":
                 ticket.votes += 1
                 session.add(ticket)
                 session.commit()
@@ -852,7 +859,7 @@ def index() -> rx.Component:
                     # Header + Info Hover Card
                     rx.hstack(
                         rx.text(
-                            "BACKFILL QUEUE",
+                            "COMMUNITY BACKFILL",
                             font_size="0.75rem",
                             font_weight="700",
                             color="#888888",
@@ -871,7 +878,7 @@ def index() -> rx.Component:
                             rx.hover_card.content(
                                 rx.text(
                                     "Historical coverage is still being backfilled. "
-                                    "Unfortunately, the developer has to scrape and format all of this manually. Tragic.",
+                                    "The developer has to structure and verify all of this manually. Tragic.",
                                     font_size="0.7rem",
                                     line_height="1.4",
                                     color="#cccccc",
@@ -893,7 +900,7 @@ def index() -> rx.Component:
                     ),
                     rx.heading("Knowledge Coverage", size="3", color="#ffffff"),
                     rx.text(
-                        "Upvote or request historical telemetry to prioritize for our ingestion scraper.",
+                        "Notice a missing event in an investigation? Upvote or request historical incidents to be indexed next.",
                         font_size="0.75rem",
                         color="#777777",
                         line_height="1.5",
@@ -970,17 +977,22 @@ def index() -> rx.Component:
                                                 "▲",
                                                 size="1",
                                                 variant="ghost",
-                                                disabled=State.upvoted_ids.contains(item["id"]),
+                                                disabled=State.upvoted_ids.contains(item["id"]) | (item["status"] == "ingested"),
+                                                cursor=rx.cond(item["status"] == "ingested", "not-allowed", "pointer"),
                                                 color=rx.cond(
-                                                    State.upvoted_ids.contains(item["id"]),
-                                                    "#e10600",
-                                                    "#666666",
+                                                    item["status"] == "ingested",
+                                                    "#333333",
+                                                    rx.cond(
+                                                        State.upvoted_ids.contains(item["id"]),
+                                                        "#e10600",
+                                                        "#666666",
+                                                    ),
                                                 ),
                                                 font_size="0.65rem",
                                                 padding="0 0.2rem",
                                                 height="auto",
                                                 on_click=lambda: State.upvote_ticket(item["id"]),
-                                                _hover={"color": "#e10600", "background": "transparent"},
+                                                _hover={"color": rx.cond(item["status"] == "ingested", "#333333", "#e10600"), "background": "transparent"},
                                             ),
                                             rx.text(
                                                 item["votes"],
@@ -988,9 +1000,13 @@ def index() -> rx.Component:
                                                 font_weight="700",
                                                 font_family="monospace",
                                                 color=rx.cond(
-                                                    State.upvoted_ids.contains(item["id"]),
-                                                    "#ffffff",
-                                                    "#888888",
+                                                    item["status"] == "ingested",
+                                                    "#444444",
+                                                    rx.cond(
+                                                        State.upvoted_ids.contains(item["id"]),
+                                                        "#ffffff",
+                                                        "#888888",
+                                                    ),
                                                 ),
                                                 min_width="18px",
                                             ),

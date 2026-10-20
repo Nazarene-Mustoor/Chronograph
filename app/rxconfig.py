@@ -1,5 +1,6 @@
 import os
 import reflex as rx
+from dotenv import load_dotenv
 
 config = rx.Config(
     app_name="ui",
@@ -11,5 +12,5 @@ config = rx.Config(
         rx.plugins.TailwindV4Plugin(),
         rx.plugins.RadixThemesPlugin(),
     ],
-    db_url="sqlite:///reflex.db",
+    db_url=os.getenv("DATABASE_URL", "sqlite:///reflex.db"),
 )
