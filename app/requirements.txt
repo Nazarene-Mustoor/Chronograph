@@ -4,5 +4,7 @@ sqlmodel
 greenlet
 alembic
 sqlalchemy
-psycopg2-binary
 python-dotenv
+python-dotenv
+psycopg[binary]
+psycopg2-binary
