@@ -4,3 +4,4 @@ sqlmodel
 greenlet
 alembic
 sqlalchemy
+psycopg2-binary
