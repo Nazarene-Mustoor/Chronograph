@@ -497,6 +497,28 @@ def empty_telemetry_placeholder() -> rx.Component:
         width="100%",
     )
 
+def custom_blockquote(children):
+    return rx.box(
+        rx.box(
+            children,
+            color="#E2E8F0",
+            font_size="0.95rem",
+            font_style="italic",
+            line_height="1.65",
+            letter_spacing="0.01em",
+        ),
+        bg="rgba(255, 255, 255, 0.03)",          # Translucent dark-panel tint
+        border_left="4px solid #E10600",           # F1 Red accent stripe
+        border_radius="0px 8px 8px 0px",          # Rounded right edge
+        padding="1rem 1.25rem",                    # Medium-style generous spacing
+        margin_y="1.25rem",                        # Breathing room top and bottom
+        width="100%",
+    )
+
+MARKDOWN_COMPONENT_MAP = {
+    "blockquote": lambda *children: custom_blockquote(children),
+}
+
 def index() -> rx.Component:
     return rx.box(
         # Header
@@ -710,10 +732,12 @@ def index() -> rx.Component:
                                 State.answer_expanded,
                                 rx.markdown(
                                     State.answer,
+                                    component_map=MARKDOWN_COMPONENT_MAP,
                                     margin_top="1rem",
                                 ),
                                 rx.markdown(
                                     State.answer_preview,
+                                    component_map=MARKDOWN_COMPONENT_MAP,
                                     margin_top="1rem",
                                 ),
                             ),

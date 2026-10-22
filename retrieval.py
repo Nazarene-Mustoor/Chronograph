@@ -1,9 +1,15 @@
+"""
+Chronograph: CLI Retrieval & Evaluation Module
+Aligned with api.py for unified prompt architecture, token budgets, and hybrid GraphRAG retrieval.
+"""
+
 import os
 import re
+import time
 from datetime import datetime
 from dotenv import load_dotenv
 from neo4j import GraphDatabase
-from openai import OpenAI, RateLimitError
+from openai import OpenAI, RateLimitError, APIError
 
 from neo4j_graphrag.embeddings import GeminiEmbedder
 from neo4j_graphrag.retrievers import VectorCypherRetriever
@@ -19,32 +25,42 @@ driver = GraphDatabase.driver(
     keep_alive=True
 )
 
-# 2. LLM & Embedder Configuration
+# 2. LLM & Fallback Configuration (Aligned with api.py)
+PRIMARY_MODEL = "gemini-3.8-flash"
+FALLBACK_MODEL = "gemini-3.5-flash-lite"
+
 llm_client = OpenAI(
-    # api_key=os.getenv("GROQ_API_KEY"),
-    # base_url="https://api.groq.com/openai/v1"
     api_key=os.getenv("GEMINI_API_KEY"),
     base_url="https://generativelanguage.googleapis.com/v1beta/openai/"
 )
-MODEL_NAME = "gemini-3.8-flash"
 
 def call_llm(prompt: str, temperature: float = 0.0) -> str:
-    response = llm_client.chat.completions.create(
-        model=MODEL_NAME,
-        messages=[{"role": "user", "content": prompt}],
-        temperature=temperature
-    )
-    msg = response.choices[0].message
-    if hasattr(msg, "content") and msg.content:
-        return msg.content.strip()
-    return str(msg).strip()
+    """Calls Primary Model with fallback to secondary model on rate limit or API error."""
+    try:
+        response = llm_client.chat.completions.create(
+            model=PRIMARY_MODEL,
+            messages=[{"role": "user", "content": prompt}],
+            temperature=temperature
+        )
+        msg = response.choices[0].message
+        return msg.content.strip() if hasattr(msg, "content") and msg.content else str(msg).strip()
+    except (RateLimitError, APIError) as e:
+        print(f"⚠️ [CLI FALLBACK TRIGGERED]: {PRIMARY_MODEL} rate-limited ({e}). Switching to {FALLBACK_MODEL}...")
+        time.sleep(1.0)
+        response = llm_client.chat.completions.create(
+            model=FALLBACK_MODEL,
+            messages=[{"role": "user", "content": prompt}],
+            temperature=temperature
+        )
+        msg = response.choices[0].message
+        return msg.content.strip() if hasattr(msg, "content") and msg.content else str(msg).strip()
 
 embedder = GeminiEmbedder(
     model="gemini-embedding-001",
     api_key=os.getenv("GEMINI_API_KEY")
 )
 
-# 3. Streamlined, General-Purpose Cypher Generation Prompt
+# 3. Streamlined, General-Purpose Cypher Generation Prompt (Identical to api.py)
 CYPHER_PROMPT = """Generate a raw Neo4j Cypher query and classify the query archetype to retrieve relevant facts from an F1 Knowledge Graph.
 
 Archetypes (Choose exactly one):
@@ -119,41 +135,50 @@ vector_cypher_retriever = VectorCypherRetriever(
     retrieval_query=RETRIEVAL_QUERY
 )
 
-# 5. Temporal Synthesis Template
+# 5. Synthesis Template (Synchronized with api.py)
 today_str = datetime.now().strftime("%B %d, %Y")
 
 chronograph_template = RagTemplate(
-    template=f"""You are Chronograph, an expert Formula 1 Temporal Knowledge Assistant with the editorial judgment of a veteran motorsport journalist.
+    template=f"""You are ChronoGraph, an elite Formula 1 forensic intelligence engine with the analytical depth of a veteran technical director and motorsport journalist.
 TODAY'S DATE: {today_str}
 
-Answer the user's question using the provided context retrieved from the Knowledge Graph.
+Synthesize a comprehensive, authoritative technical debrief for the user query using the provided Knowledge Graph context and Telemetry Traces.
 
-Editorial & Synthesis Rules:
-1. Editorial Hierarchy: Prioritize high-impact structural turning points (contract signings, team departures, championship milestones, technical leadership changes).
-2. Ground your response temporally relative to TODAY'S DATE ({today_str}).
-3. Synthesize milestones into a clear chronological breakdown.
-4. Exhaustive Synthesis & Depth: Provide an in-depth, comprehensive journalistic breakdown. Explain the full narrative, technical engineering context, and sporting implications thoroughly. Only mention data gaps if critical requested milestones are completely missing, and keep any such note strictly to a single brief sentence at the very end.
-5. Constructor & Driver Integrity:
-   - In modern Formula 1, a driver actively races for only ONE constructor team during a specific Grand Prix weekend or season.
-   - If retrieved context lists feeder series, GT cars (e.g., Lamborghini), junior academies, test outings, or transfer rumors, distinguish between past background/testing and the driver's active Formula 1 race seat. Never claim a driver raced for multiple constructors in the same Grand Prix.
-   - Teammate interactions, pit strategy, or team orders between drivers representing the same constructor are strictly intra-team matters.
-6. Penalty & Upgrade Consolidation:
-   - Formula 1 news reports often describe the EXACT same penalty or car update using synonymous wording (e.g., 'grid-penalty', 'engine-penalty', and 'three-place grid-penalty' for a driver at the same race are different journalistic descriptions of ONE single regulatory sanction, not multiple separate penalties).
-   - Consolidate synonymous penalty or upgrade descriptions into a unified, accurate event summary rather than listing them as separate consecutive infractions.
-7. Zero Hallucination: Never invent driver transfers, results, or relationships. If a structured entity tag contradicts a detailed narrative event, prioritize the concrete event narrative.
+### Core Objectives:
+1. **The Paddock Primer Card (CRITICAL - ALWAYS FIRST)**:
+   Begin your debrief immediately with a Markdown Blockquote (`>`) that acts as an accessible translator for the entire technical investigation below.
+   Ensure there is a BLANK quote line (`>`) between the header and the text so the narrative begins cleanly on a new line.
+   Format it EXACTLY like this:
+   > 🎙️ **PADDOCK PRIMER // ESSENTIAL CONTEXT**
+   >
+   > [In 2–4 clear, compelling sentences, explain the full essence of what the technical investigation below is detailing:
+   > - Translate the core subject matter, engineering concepts, or tactical decisions into plain English.
+   > - State the competitive stakes, outcomes, or key consequences for the teams and drivers involved.
+   > - NO REPETITION OR COPYING (STRICT): DO NOT copy verbatim sentences or simply restate the sequential stages from the TELEMETRY RECONSTRUCTION TRACES or the upcoming technical dossier. The Primer must be an elevated, macroscopic summary giving the big picture, while the dossier below handles the granular data, specific sector metrics, and technical mechanics.]
+2. **Direct Strategic Grounding**: If the question asks about specific team communications, radio messages, or backstage disputes and the exact verbatim transcript is not documented, analyze the verified tactical decisions, pit-wall run plans, delta pacing, or tow allocations recorded in the context. Do NOT lead with negative disclaimers or say "no records exist."
+3. **Structured Analytical Depth**: Deliver an exhaustive breakdown below the Paddock Primer. Cover the engineering background, aerodynamic/power unit context, regulatory implications, and paddock fallout thoroughly.
+4. **Formatting Requirements**:
+   - Follow the Paddock Primer with clean Markdown subheadings (`### Timeline Breakdown`, `### Technical & Strategic Analysis`, `### Regulatory & Paddock Impact`, etc.) to structure the report.
+   - Include at least **one Markdown comparison or event table** detailing key telemetry metrics, lap deltas, driver comparisons, or chronological phases.
+   - Use bold bullet points for specific technical triggers, telemetry differentials, or regulatory articles.
+   - **STRICT PROHIBITION ON ASCII DIAGRAMS**: DO NOT draw ASCII boxes, pseudo-code flowcharts, character-art trees, or wireframes (e.g., using `+---`, `|`, `+`, `v`). Format all structural hierarchies, system pillars, and sequences exclusively using standard Markdown Tables or bold nested lists.
+5. **Archive Note (Conditional)**:
+   If and ONLY if critical telemetry traces, sector deltas, or FIA official documents needed to fully reconstruct the incident are missing from the retrieved context, end the report with a single concise line:
+   > ⚠️ **ARCHIVE NOTE:** [State specifically what telemetry or documentation is absent from the current database. If known, users may submit this session to the Backfill Queue.]
+   *(Do NOT include this block if the provided data is sufficient to answer the query.)*
 
-# Context:
+# Retrieved Context:
 {{context}}
 
 # Question:
 {{query_text}}
 
-# Answer:
+# Debrief:
 """,
     expected_inputs=["context", "query_text"]
 )
 
-# 6. Hybrid Retrieval Engine
+# 6. Hybrid Retrieval Engine (Aligned with api.py context scale)
 def format_cypher_records(records: list[dict]) -> str:
     lines = []
     for r in records[:15]:
@@ -165,12 +190,11 @@ def ask_chronograph(question: str):
     print(f"\n🏎️ [USER QUERY]: {question}")
     retrieved_contexts = []
 
-    # Branch 1: Graph Cypher Traversal (Structured Facts)
+    # Branch 1: Graph Cypher Traversal
     try:
         gen_prompt = CYPHER_PROMPT.replace("{query_text}", question)
         raw_cypher = call_llm(gen_prompt, temperature=0.0)
 
-        # --- PARSE ARCHETYPE & CLEAN QUERY ---
         archetype = "FACTUAL_LOOKUP"
         lines = raw_cypher.strip().splitlines()
         if lines and "ARCHETYPE:" in lines[0]:
@@ -193,49 +217,48 @@ def ask_chronograph(question: str):
         if records:
             graph_context = format_cypher_records(records)
             retrieved_contexts.append(f"GRAPH DATABASE TRAVERSAL:\n{graph_context}")
-        else:
-            print("   ⚠️ Text2Cypher returned 0 records.")
     except Exception as e:
         print(f"   ❌ Text2Cypher Error: {e}")
 
-    # Branch 2: VectorCypher Semantic Retrieval (Narrative Chunks)
+    # Branch 2: VectorCypher Semantic Retrieval (top_k=6 matching api.py)
     try:
         print("\n🔄 [STEP 2: VECTORCYPHER SEMANTIC RETRIEVAL]")
-        search_res = vector_cypher_retriever.search(query_text=question, top_k=3)
-        print(f"   Semantic Chunks Retrieved: {len(search_res.items)}")
+        search_res = vector_cypher_retriever.search(query_text=question, top_k=6)
+        items = getattr(search_res, "items", [])
+        print(f"   Semantic Chunks Retrieved: {len(items)}")
 
-        vector_chunks = "\n---\n".join([str(item.content)[:1800] for item in search_res.items[:3] if item.content])
+        vector_chunks = "\n---\n".join([str(item.content) for item in items if getattr(item, "content", None)])
         if vector_chunks:
             retrieved_contexts.append(f"SEMANTIC VECTOR RETRIEVAL:\n{vector_chunks}")
     except Exception as e:
         print(f"   ❌ Vector Search Error: {e}")
 
-    # Step 3: Synthesis
+    # Step 3: Synthesis with Expanded Context Budget (8000 words matching api.py)
     full_context = "\n\n====================\n\n".join(retrieved_contexts)
     
     words = full_context.split()
-    if len(words) > 3500:
-        print(f"   ⚠️ Context exceeded safe token budget ({len(words)} words). Truncating safely...")
-        full_context = " ".join(words[:3500])
+    if len(words) > 8000:
+        print(f"   ⚠️ Context exceeded safe token budget ({len(words)} words). Truncating safely to 8000 words...")
+        full_context = " ".join(words[:8000])
 
-    print(f"\n🧠 [STEP 3: LLM TEMPORAL SYNTHESIS]")
+    print(f"\n🧠 [STEP 3: LLM SYNTHESIS]")
     print(f"   Payload Word Count: ~{len(full_context.split())} words")
     
     prompt = chronograph_template.template.replace("{context}", full_context).replace("{query_text}", question)
-    return call_llm(prompt, temperature=0.0)
+    return call_llm(prompt, temperature=0.2)
 
-# 7. Adding a pure vector search w/o the cypher query traversal for evaluator.py
 def pure_vector_search(question: str) -> str:
     """Pure Vector RAG baseline: retrieves chunks without structured Cypher traversal."""
     try:
-        search_res = vector_cypher_retriever.search(query_text=question, top_k=3)
-        vector_chunks = "\n---\n".join([str(item.content)[:1800] for item in search_res.items[:3] if item.content])
+        search_res = vector_cypher_retriever.search(query_text=question, top_k=6)
+        items = getattr(search_res, "items", [])
+        vector_chunks = "\n---\n".join([str(item.content) for item in items if getattr(item, "content", None)])
         context = f"SEMANTIC VECTOR RETRIEVAL ONLY:\n{vector_chunks}" if vector_chunks else "NO CONTEXT FOUND."
     except Exception as e:
         context = f"Vector retrieval error: {e}"
 
     prompt = chronograph_template.template.replace("{context}", context).replace("{query_text}", question)
-    return call_llm(prompt, temperature=0.0)
+    return call_llm(prompt, temperature=0.2)
 
 # Alias for consistent naming
 hybrid_graphrag_search = ask_chronograph
