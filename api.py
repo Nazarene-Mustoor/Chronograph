@@ -190,9 +190,9 @@ Synthesize a comprehensive, authoritative technical debrief for the user query u
 
 ### Core Objectives:
 1. **The Paddock Primer Card (CRITICAL - ALWAYS FIRST)**:
-   Begin your debrief immediately with a Markdown Blockquote (`>`).
-   CRITICAL FORMATTING: You must output a header line, followed by an empty blockquote line (`>`), followed by your paragraph on line 3.
-   Format EXACTLY like this:
+   Begin your debrief immediately with a Markdown Blockquote (`>`) that acts as an accessible translator for the entire technical investigation below.
+   Ensure there is a BLANK quote line (`>`) between the header and the text so the narrative begins cleanly on a new line.
+   Format it EXACTLY like this:
    > 🎙️ **PADDOCK PRIMER // ESSENTIAL CONTEXT**
    >
    > [In 2–4 clear, compelling sentences, explain the full essence of what the technical investigation below is detailing:
@@ -488,8 +488,8 @@ def ask_question_stream(request: QueryRequest):
                             yield json.dumps({"type": "token", "content": p + "\n"}) + "\n"
                         line_buffer = parts[-1]
 
-                if line_buffer:
-                    yield json.dumps({"type": "token", "content": line_buffer}) + "\n"
+            if line_buffer:
+                yield json.dumps({"type": "token", "content": line_buffer}) + "\n"
 
         except Exception as err:
             import traceback
