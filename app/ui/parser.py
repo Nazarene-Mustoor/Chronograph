@@ -283,3 +283,9 @@ def analyze_debrief_for_carousel(text: str) -> Dict[str, Any]:
         "is_open": True,
         "slides": slides_data
     }
+
+def clean_primer_markdown(text: str) -> str:
+    """Guarantees that the Paddock Primer header and body are separated into two distinct paragraphs inside the blockquote."""
+    # Matches the primer header even if the emoji changes, bolding is missing, or body text follows immediately
+    pattern = r"(>\s*[🏎️🎙️]?\s*\**PADDOCK PRIMER[^\n\*\>]*\**)\s*(?:\n>\s*|\n\s*|:\s*|\s+)([A-Z])"
+    return re.sub(pattern, r"\1\n>\n> \2", text, count=1)
