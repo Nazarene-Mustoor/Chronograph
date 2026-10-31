@@ -8,6 +8,7 @@ import re
 import json
 import string
 import time
+import gc
 from datetime import datetime
 from typing import List, Optional, Dict, Any
 from dotenv import load_dotenv
@@ -46,8 +47,43 @@ driver = GraphDatabase.driver(
     os.getenv("NEO4J_URI"),
     auth = (os.getenv("NEO4J_USERNAME"), os.getenv("NEO4J_PASSWORD")),
     max_connection_lifetime = 200,
+    max_connection_pool_size=15,
+    connection_acquisition_timeout=30,
     keep_alive = True
 )
+
+def sanitize_ascii_diagrams(text: str) -> str:
+    """
+    Cleans raw ASCII diagrams, box drawings, and branch trees from generated output.
+    Preserves legitimate Markdown tables while stripping flowchart connectors.
+    """
+    lines = text.split("\n")
+    cleaned_lines = []
+
+    # Detects pure connector lines like '|', '|    |', '+------+ ', 'v    v', '----->'
+    connector_pattern = re.compile(r"^[\s\|\+\-\=\<\>\_\^v\/\\:\.]+$")
+
+    for line in lines:
+        stripped = line.strip()
+
+        # If it looks like a valid markdown table row (e.g., | Phase | Event | Impact |), keep it
+        if stripped.startswith("|") and stripped.endswith("|") and any(c.isalnum() for c in stripped):
+            cleaned_lines.append(line)
+            continue
+
+        # Drop lines that are purely drawn connectors, pipes, or arrow stems
+        if connector_pattern.match(stripped) and len(stripped) > 0:
+            continue
+
+        # Convert standalone bracketed nodes (e.g., '[SQ1 Red Flag: Perez Turn 5 Debris]') to clean bullets
+        bracket_match = re.match(r"^\s*\[(.*?)\]\s*$", line)
+        if bracket_match:
+            cleaned_lines.append(f"- **{bracket_match.group(1)}**")
+            continue
+
+        cleaned_lines.append(line)
+
+    return "\n".join(cleaned_lines)
 
 # 3. Model configuration & Fallback ENgine
 PRIMARY_MODEL = "gemini-3.8-flash"
@@ -203,7 +239,9 @@ Synthesize a comprehensive, authoritative technical debrief for the user query u
    - Follow the Paddock Primer with clean Markdown subheadings (`### Timeline Breakdown`, `### Technical & Strategic Analysis`, `### Regulatory & Paddock Impact`, etc.) to structure the report.
    - Include at least **one Markdown comparison or event table** detailing key telemetry metrics, lap deltas, driver comparisons, or chronological phases.
    - Use bold bullet points for specific technical triggers, telemetry differentials, or regulatory articles.
-   - **STRICT PROHIBITION ON ASCII DIAGRAMS**: DO NOT draw ASCII boxes, pseudo-code flowcharts, character-art trees, or wireframes (e.g., using `+---`, `|`, `+`, `v`). Format all structural hierarchies, system pillars, and sequences exclusively using standard Markdown Tables or bold nested lists.
+   - **STRICT PROHIBITION ON ASCII/CODE BOX DIAGRAMS (ZERO TOLERANCE)**: 
+     NEVER generate ASCII character boxes, pseudo-code flowcharts, text trees, or block wireframes (e.g. using `|`, `+---`, `v`, `-->`, or fenced ```text / ```ascii code blocks). 
+     Format all structural hierarchies, fault cascades, and sequential flows EXCLUSIVELY as Markdown Tables or bold nested bullet lists.
 6. Telemetry & Archive Gaps (Conditional):
    If and ONLY if critical telemetry traces, sector deltas, or FIA official documents needed to fully reconstruct the incident are missing from the retrieved context, end the report with a single concise line:
    > ⚠️ **ARCHIVE NOTE:** [State specifically what telemetry or documentation is absent from the current database. If known, users may submit this session to the Backfill Queue.]
@@ -273,10 +311,63 @@ GRAPH FACTS:
 {context}
 """
 
+HUD_CANVAS_PROMPT = """You are ChronoGraph Telemetry Visual Engine.
+Based on the F1 investigation query: "{query}" and retrieved facts, generate 1 to 6 structured carousel HUD visual slides for the UI canvas.
+
+SLIDE ARCHETYPES & RULES:
+
+1. "circuit":
+   - Generate when a specific Grand Prix track, braking zone, or track limit is discussed.
+   - MULTI-CIRCUIT RULE: If the query compares multiple tracks, or details incidents across multiple rounds (e.g. Monza vs Spa, or 2024 Austin vs 2024 Mexico), generate a SEPARATE "circuit" slide for each track!
+   - "slug": Choose exactly one: [bahrain, jeddah, melbourne, suzuka, shanghai, miami, imola, monaco, montreal, catalunya, red_bull_ring, silverstone, hungaroring, spa, zandvoort, monza, baku, marina_bay, cota, mexico, interlagos, las_vegas, losail, yas_marina, sepang, hockenheim, istanbul_park, nurburgring, portimao, mugello, paul_ricard, magny_cours, indianapolis]
+   - "badge_title": e.g. "SILVERSTONE // 2024 BRITISH GP" or "COTA // TURN 12 DISPUTE"
+   - "focus_turns": Array of turn number strings (e.g. ["9"] or ["1", "2"]). Leave [] for whole track overview.
+   - "callout_label": Short uppercase label (e.g. "T9 (COPSE) ENTRY DELTA", "TURN 12 APEX LIMITS")
+
+2. "chassis":
+   - Generate when aerodynamic upgrades, structural parts, ride heights, or mechanical systems are analyzed.
+   - MULTI-CAR / MULTI-SEASON RULE:
+     * If two rival teams are compared (e.g. McLaren vs Mercedes), create a SEPARATE "chassis" slide for each team!
+     * If a single team evolved across different seasons or spec versions (e.g. McLaren 2024 MCL38 vs 2026 concept, or Red Bull pre-upgrade vs post-upgrade), create a SEPARATE "chassis" slide for each evolution!
+   - "team": Constructor name (e.g. "MCLAREN", "FERRARI", "MERCEDES", "RED BULL")
+   - "badge_title": e.g. "MCLAREN // MCL38 SPEC", "MERCEDES // W15 B-SPEC", "RED BULL // RB20 AUSTIN FLOOR"
+   - "focus_element": Choose exactly one matching the SVG component IDs:
+     ["front-wing-assembly", "sidepod-ramp", "floor-underbody", "rear-wing-assembly", "front-suspension-profile", "rear-suspension-profile", "cockpit-halo"]
+   - "animate_flap": true ONLY if active aerodynamics, DRS flap opening/flutter, or revolving "Macarena" straight-line wings are discussed. Otherwise false.
+   - "callout_label": Short uppercase label (e.g. "MCLAREN // MINI-DRS DEFLECTION", "RED BULL // T-TRAY BIB DEVICE")
+   - "spec_detail": 1 short punchy sentence explaining the mechanical mechanism.
+
+3. "penalty":
+   - Generate when an FIA ruling, protest, steward investigation, disqualification, or Technical Directive is involved.
+   - MULTI-PENALTY RULE: If multiple drivers were penalized (e.g. Norris and Verstappen), or an incident went from Steward Notice -> Formal Appeal/Right of Review, generate distinct penalty slides for each action!
+   - "badge_title": "FIA STEWARDS RULING" or "WMSC TECHNICAL DIRECTIVE"
+   - "title": e.g. "DOCUMENT 45 // CAR 4 (NORRIS)" or "FIA TECHNICAL DIRECTIVE TD018"
+   - "decision": e.g. "5 SEC TIME PENALTY", "CAR DISQUALIFIED", or "REGULATORY BAN"
+   - "incident": 1-2 concise sentences summarizing the regulatory verdict and article cited.
+
+4. "radio":
+   - Generate when an iconic team quote, engineer order, or pit-to-car dispute occurred.
+   - "badge_title": "PIT WALL INTERCEPT"
+   - "speaker": e.g. "MCLAREN // WILL JOSEPH TO NORRIS"
+   - "message": Verbatim radio quote or tactical order.
+
+DECK ORDERING:
+- Chronological / comparative order: Track -> Team A Chassis -> Team B Chassis -> Stewards Penalty / Radio.
+- Output STRICT JSON ONLY matching: {"slides": [...]}
+
+CONTEXT:
+{context}
+"""
+
 def generate_cinematic_traces(records: list, vector_chunks: str, query: str, archetype: str) -> list[dict]:
     """Generates rich, descriptive telemetry cards across all 7 archetypes using fast Flash-Lite inference."""
     raw_context = f"Records: {records[:8]}\nChunks: {vector_chunks[:1200]}"
-    prompt = TRACE_SYNTH_PROMPT.format(archetype=archetype, query=query, context=raw_context)
+    prompt = (
+        TRACE_SYNTH_PROMPT
+        .replace("{archetype}", archetype)
+        .replace("{query}", query)
+        .replace("{context}", raw_context)
+    )
 
     try:
         res = llm_client.chat.completions.create(
@@ -299,6 +390,35 @@ def generate_cinematic_traces(records: list, vector_chunks: str, query: str, arc
         "detail": f"Telemetry verified across official records for {archetype.replace('_', ' ').title()}."
     }]
 
+def generate_hud_slides(records: list, vector_chunks: str, query: str) -> list[dict]:
+    """Generates structured visual slide payloads for the right-hand HUD deck."""
+    raw_context = f"Records: {records[:8]}\nChunks: {vector_chunks[:1500]}"
+    # Safe replacement prevents KeyError on {"slides": [...]}
+    prompt = (
+        HUD_CANVAS_PROMPT
+        .replace("{query}", query)
+        .replace("{context}", raw_context)
+    )
+
+    try:
+        res = llm_client.chat.completions.create(
+            model=FALLBACK_MODEL,
+            messages=[{"role": "user", "content": prompt}],
+            response_format={"type": "json_object"},
+            temperature=0.1,
+        )
+        data = json.loads(res.choices[0].message.content)
+        slides = data.get("slides", [])
+        if slides:
+            return slides
+    except Exception as e:
+        print(f"⚠️ [HUD SYNTH NOTICE]: {e}")
+
+    return [{
+        "type": "fallback",
+        "badge_title": "PADDOCK REPORT"
+    }]
+
 @app.post("/ask_stream")
 def ask_question_stream(request: QueryRequest):
     """Streams graph telemetry first, followed by synthesis tokens in real time."""
@@ -307,94 +427,123 @@ def ask_question_stream(request: QueryRequest):
         raise HTTPException(status_code=400, detail="Query cannot be empty.")
 
     def event_stream():
-        archetype = "FACTUAL_LOOKUP"
-        records = []
-        clean_cypher = ""
-
-        # Step 1: Text2Cypher using Flash-Lite for speed
         try:
-            gen_prompt = CYPHER_PROMPT.replace("{query_text}", query_text)
-            raw_cypher_res = llm_client.chat.completions.create(
-                model=FALLBACK_MODEL,
-                messages=[{"role": "user", "content": gen_prompt}],
-                temperature=0.0
+            archetype = "FACTUAL_LOOKUP"
+            records = []
+            clean_cypher = ""
+
+            # Step 1: Text2Cypher using Flash-Lite for speed
+            try:
+                gen_prompt = CYPHER_PROMPT.replace("{query_text}", query_text)
+                raw_cypher_res = llm_client.chat.completions.create(
+                    model=FALLBACK_MODEL,
+                    messages=[{"role": "user", "content": gen_prompt}],
+                    temperature=0.0
+                )
+                raw_cypher = raw_cypher_res.choices[0].message.content or ""
+                sanitized = re.sub(r"^```(cypher)?|```$", "", raw_cypher.strip(), flags=re.MULTILINE).strip()
+                lines = sanitized.splitlines()
+
+                if lines and "ARCHETYPE:" in lines[0]:
+                    archetype = lines[0].split("ARCHETYPE:")[-1].strip()
+                    clean_cypher = "\n".join(lines[1:]).strip()
+                else:
+                    clean_cypher = sanitized
+
+                clean_cypher = re.sub(r"^```(cypher)?|```$", "", clean_cypher, flags=re.MULTILINE).strip()
+
+                with driver.session(database=os.getenv("NEO4J_DATABASE", "neo4j")) as session:
+                    db_res = session.run(clean_cypher)
+                    records = [record.data() for record in db_res]
+            except Exception as e:
+                print(f"⚠️ [CYPHER STREAM ERROR]: {e}")
+
+            # Step 2: Vector retrieval
+            # Increase top_k to 6 or 8 chunks so the model actually gets the full story
+            vector_chunks = ""
+            try:
+                search_res = vector_cypher_retriever.search(query_text=query_text, top_k=6)
+                items = getattr(search_res, "items", [])
+                # Allow up to 3500 chars per chunk rather than aggressively slicing
+                vector_chunks = "\n---\n".join([str(item.content) for item in items if getattr(item, "content", None)])
+            except Exception as e:
+                print(f"⚠️ [VECTOR STREAM ERROR]: {e}")
+
+            # Step 3: Instantly generate rich, descriptive trace cards via Flash-Lite
+            # Pass generous context to the trace generator (not just 1200 chars)
+            graph_traces = generate_cinematic_traces(records, vector_chunks[:4000], query_text, archetype)
+            hud_slides = generate_hud_slides(records, vector_chunks[:4000], query_text)
+
+            # EMIT TELEMETRY PACKET FIRST: Pit Wall renders rich cards immediately
+            yield json.dumps({
+                "type": "telemetry",
+                "archetype": archetype,
+                "traces": graph_traces,
+                "hud_slides": hud_slides,
+            }) + "\n"
+
+            # Step 4: Stream the comprehensive editorial analysis via Gemini 3.8 Flash
+            # Format traces so the synthesis model sees the exact cards shown on screen
+            formatted_traces = "\n".join([
+                f"- [{t.get('stage', 'TRACE')}]: {t.get('title', '')} -> {t.get('detail', '')}"
+                for t in graph_traces
+            ])
+
+            # Step 5: Stream the comprehensive editorial analysis via Gemini 3.8 Flash
+            full_context = (
+                f"TELEMETRY RECONSTRUCTION TRACES (DISPLAYED ON SCREEN):\n{formatted_traces}\n\n"
+                f"GRAPH DATABASE TRAVERSAL:\n{records[:12]}\n\n"
+                f"SEMANTIC VECTOR RETRIEVAL:\n{vector_chunks}"
             )
-            raw_cypher = raw_cypher_res.choices[0].message.content or ""
-            sanitized = re.sub(r"^```(cypher)?|```$", "", raw_cypher.strip(), flags=re.MULTILINE).strip()
-            lines = sanitized.splitlines()
+            words = full_context.split()
+            if len(words) > 8000:
+                full_context = " ".join(words[:8000])
 
-            if lines and "ARCHETYPE:" in lines[0]:
-                archetype = lines[0].split("ARCHETYPE:")[-1].strip()
-                clean_cypher = "\n".join(lines[1:]).strip()
-            else:
-                clean_cypher = sanitized
+            synth_prompt = chronograph_template.template.replace("{context}", full_context).replace("{query_text}", query_text)
 
-            clean_cypher = re.sub(r"^```(cypher)?|```$", "", clean_cypher, flags=re.MULTILINE).strip()
-
-            with driver.session(database=os.getenv("NEO4J_DATABASE", "neo4j")) as session:
-                db_res = session.run(clean_cypher)
-                records = [record.data() for record in db_res]
-        except Exception as e:
-            print(f"⚠️ [CYPHER STREAM ERROR]: {e}")
-
-        # Step 2: Vector retrieval
-        # Increase top_k to 6 or 8 chunks so the model actually gets the full story
-        vector_chunks = ""
-        try:
-            search_res = vector_cypher_retriever.search(query_text=query_text, top_k=6)
-            items = getattr(search_res, "items", [])
-            # Allow up to 3500 chars per chunk rather than aggressively slicing
-            vector_chunks = "\n---\n".join([str(item.content) for item in items if getattr(item, "content", None)])
-        except Exception as e:
-            print(f"⚠️ [VECTOR STREAM ERROR]: {e}")
-
-        # Step 3: Instantly generate rich, descriptive trace cards via Flash-Lite
-        # Pass generous context to the trace generator (not just 1200 chars)
-        graph_traces = generate_cinematic_traces(records, vector_chunks[:4000], query_text, archetype)
-
-        # EMIT TELEMETRY PACKET FIRST: Pit Wall renders rich cards immediately
-        yield json.dumps({
-            "type": "telemetry",
-            "archetype": archetype,
-            "traces": graph_traces
-        }) + "\n"
-
-        # Step 4: Stream the comprehensive editorial analysis via Gemini 3.8 Flash
-        # Format traces so the synthesis model sees the exact cards shown on screen
-        formatted_traces = "\n".join([
-            f"- [{t.get('stage', 'TRACE')}]: {t.get('title', '')} -> {t.get('detail', '')}"
-            for t in graph_traces
-        ])
-
-        # Step 5: Stream the comprehensive editorial analysis via Gemini 3.8 Flash
-        full_context = (
-            f"TELEMETRY RECONSTRUCTION TRACES (DISPLAYED ON SCREEN):\n{formatted_traces}\n\n"
-            f"GRAPH DATABASE TRAVERSAL:\n{records[:12]}\n\n"
-            f"SEMANTIC VECTOR RETRIEVAL:\n{vector_chunks}"
-        )
-        words = full_context.split()
-        if len(words) > 8000:
-            full_context = " ".join(words[:8000])
-
-        synth_prompt = chronograph_template.template.replace("{context}", full_context).replace("{query_text}", query_text)
-
-        stream = llm_client.chat.completions.create(
-            model=PRIMARY_MODEL,
-            messages=[{"role": "user", "content": synth_prompt}],
-            temperature=0.2,
-            stream=True,
-            extra_body={
-                "reasoning_effort": "low"
-            }
-        )
-
-        for chunk in stream:
-            if chunk.choices and chunk.choices[0].delta.content:
-                token_payload = {
-                    "type": "token",
-                    "content": chunk.choices[0].delta.content
+            stream = llm_client.chat.completions.create(
+                model=PRIMARY_MODEL,
+                messages=[{"role": "user", "content": synth_prompt}],
+                temperature=0.2,
+                stream=True,
+                extra_body={
+                    "reasoning_effort": "low"
                 }
-                yield json.dumps(token_payload) + "\n"
+            )
+
+            line_buffer = ""
+            for chunk in stream:
+                if chunk.choices and chunk.choices[0].delta.content:
+                    line_buffer += chunk.choices[0].delta.content
+                    if "\n" in line_buffer:
+                        parts = line_buffer.split("\n")
+                        for p in parts[:-1]:
+                            cleaned = sanitize_ascii_diagrams(p)
+                            if cleaned:
+                                yield json.dumps({"type": "token", "content": cleaned + "\n"}) + "\n"
+                        line_buffer = parts[-1]
+
+            # Flush any remaining text in the buffer
+            if line_buffer:
+                cleaned = sanitize_ascii_diagrams(line_buffer)
+                if cleaned:
+                    yield json.dumps({"type": "token", "content": cleaned}) + "\n"
+
+        except Exception as err:
+            import traceback
+            traceback.print_exc()
+            error_payload = {
+                "type": "token",
+                "content": f"\n\n> ⚠️ **STREAM ERROR:** Engine encountered an issue ({str(err)})."
+            }
+            yield json.dumps(error_payload) + "\n"
+
+        finally:
+            # Force cleanup of prompt buffers and streaming objects
+            full_context = None
+            vector_chunks = None
+            records = None
+            gc.collect()
 
     return StreamingResponse(event_stream(), media_type="application/x-ndjson")
 

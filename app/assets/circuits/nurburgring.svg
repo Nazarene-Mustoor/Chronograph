@@ -1,0 +1,138 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 500 500" width="100%" height="100%">
+  <defs>
+    <style type="text/css">
+      <![CDATA[
+      .sector { stroke: #2d2d34; stroke-width: 4px; fill: none; stroke-linecap: round; stroke-linejoin: round; }
+      .corner-marker circle { transition: all 0.2s ease; }
+      
+      @keyframes f1-turn-pulse {
+        0% { stroke-width: 2px; r: 7px; filter: drop-shadow(0 0 4px #e10600); }
+        50% { stroke-width: 3.5px; r: 8.5px; filter: drop-shadow(0 0 10px #e10600); fill: #e10600; }
+        100% { stroke-width: 2px; r: 7px; filter: drop-shadow(0 0 4px #e10600); }
+      }
+      .highlight-f1-red circle, .active-turn circle {
+        stroke: #e10600 !important;
+        stroke-width: 2.5px !important;
+        fill: #e10600 !important;
+        animation: f1-turn-pulse 1.8s infinite;
+      }
+      .highlight-f1-red text, .active-turn text {
+        fill: #ffffff !important;
+        font-weight: 900 !important;
+      }
+      .highlight-sector {
+        stroke: #e10600 !important;
+        stroke-width: 5.5px !important;
+        filter: drop-shadow(0 0 8px rgba(225, 6, 0, 0.85));
+      }
+      ]]>
+    </style>
+  </defs>
+
+  <!-- SECTORS -->
+  <g id="sectors">
+    <path id="sector-1" class="sector" d="M 390.6 104.9 L 291.9 169.2 L 271.4 182.1 L 261.5 187.0 L 251.9 191.5 L 230.5 200.9 L 226.0 201.3 L 223.1 200.3 L 221.7 198.0 L 222.6 194.8 L 225.6 187.6 L 230.3 181.3 L 239.8 170.4 L 240.5 167.8 L 240.3 164.5 L 238.5 160.9 L 234.7 157.6 L 230.8 155.4 L 226.1 153.8 L 220.6 153.1 L 216.9 153.2 L 194.2 155.4 L 183.9 157.2 L 174.7 159.0 L 168.0 161.7 L 164.3 163.9 L 162.7 166.1 L 162.6 169.5 L 163.7 172.7 L 168.2 175.5 L 174.3 176.6 L 185.2 176.3 L 191.1 176.4 L 194.6 177.5 L 197.9 179.9 L 198.6 182.7 L 197.7 189.7 L 195.8 200.1 L 191.2 216.9 L 188.8 225.5 L 186.5 232.8 L 184.4 237.8 L 175.5 255.0 L 167.6 271.5" />
+    <path id="sector-2" class="sector" d="M 167.6 271.5 L 165.0 276.6 L 164.5 279.2 L 164.2 281.7 L 165.3 284.9 L 167.1 287.6 L 169.8 290.4 L 173.8 292.8 L 176.7 294.0 L 188.6 297.6 L 202.9 301.8 L 207.0 303.8 L 209.2 306.1 L 210.3 308.1 L 210.5 310.5 L 210.1 311.9 L 208.8 314.9 L 204.3 317.7 L 186.4 323.7 L 162.9 332.2 L 151.6 336.9 L 140.4 342.0 L 123.0 352.1 L 113.8 357.9 L 105.3 364.6 L 97.0 371.5 L 89.5 378.6 L 75.8 393.4 L 71.5 396.2 L 66.6 397.3 L 62.3 397.4 L 57.7 396.5 L 53.7 394.6 L 51.0 392.0 L 50.0 389.0 L 50.1 386.1 L 51.9 383.2 L 59.1 378.6 L 117.4 341.4 L 124.2 337.0 L 126.8 334.4 L 129.3 330.9 L 131.0 326.8 L 131.3 321.2 L 130.0 316.3" />
+    <path id="sector-3" class="sector" d="M 130.0 316.3 L 126.0 308.6 L 125.0 304.7 L 125.0 298.2 L 126.7 292.9 L 152.4 241.7 L 163.6 219.4 L 167.4 210.7 L 166.6 207.8 L 163.9 204.4 L 161.8 203.0 L 159.2 202.1 L 115.2 189.6 L 110.1 186.8 L 107.4 184.1 L 105.8 180.8 L 105.5 176.3 L 106.6 173.3 L 109.2 170.0 L 115.2 165.0 L 152.6 136.1 L 189.7 107.3 L 193.7 105.2 L 198.9 102.8 L 205.8 100.8 L 232.5 95.9 L 350.3 76.1 L 351.8 75.2 L 352.0 73.7 L 350.9 71.3 L 349.9 68.4 L 350.7 66.3 L 355.8 64.4 L 375.7 58.6 L 388.2 56.4 L 430.9 50.0 L 437.2 50.0 L 442.8 51.8 L 447.0 54.7 L 449.2 57.4 L 450.0 60.0 L 449.9 63.8 L 448.1 67.4 L 391.5 104.3 L 391.5 104.3 L 390.6 104.9 L 390.6 104.9" />
+  </g>
+
+  <!-- PIT LANE -->
+  <g id="pit-lane-group">
+    <path id="pit-lane" fill="none" stroke="#1f1f24" stroke-width="2.5" stroke-linecap="round" d="M 398.6 112.9 L 206.6 190.7" />
+  </g>
+
+  <!-- DRS ACTIVATION ZONES -->
+  <g id="drs-zones">
+    <path id="drs-active" fill="none" stroke="#22c55e" stroke-width="2.2" stroke-dasharray="5 3" opacity="0.45" d="M 204.3 317.7 L 186.4 323.7 L 162.9 332.2 L 151.6 336.9 L 140.4 342.0 L 123.0 352.1 L 113.8 357.9 L 105.3 364.6 L 97.0 371.5 L 89.5 378.6 L 75.8 393.4 L 71.5 396.2 L 66.6 397.3 L 62.3 397.4 L 57.7 396.5 L 53.7 394.6 L 51.0 392.0 L 50.0 389.0 L 50.1 386.1 L 51.9 383.2" />
+  </g>
+
+  <!-- TRACK LIMITS HOTSPOTS -->
+  <g id="track-limits-hotspots">
+    <g id="track-limits-turn-1" class="track-limits-zone" opacity="0.3">
+  <circle cx="390.6" cy="104.9" r="13" fill="none" stroke="#ffb800" stroke-width="1.8" stroke-dasharray="3 3"/>
+</g>
+  <g id="track-limits-turn-4" class="track-limits-zone" opacity="0.3">
+  <circle cx="168.0" cy="161.7" r="13" fill="none" stroke="#ffb800" stroke-width="1.8" stroke-dasharray="3 3"/>
+</g>
+  </g>
+
+  <!-- START / FINISH LINE -->
+  <g id="start-finish-line" transform="translate(390.6, 104.9)">
+    <line x1="-5" y1="-5" x2="5" y2="5" stroke="#ffffff" stroke-width="2" />
+    <text x="0" y="-8" font-size="6" font-family="monospace" font-weight="700" fill="#a1a1aa" text-anchor="middle">S/F</text>
+  </g>
+
+  <!-- SPEED TRAP -->
+  <g id="speed-trap-st" transform="translate(50.1, 386.1)">
+    <rect x="-3" y="-3" width="6" height="6" fill="#e11d48" opacity="0.8" rx="1"/>
+    <text x="0" y="-6" font-size="6" font-family="monospace" font-weight="700" fill="#e11d48" text-anchor="middle">ST</text>
+  </g>
+
+  <!-- NUMBERED CORNERS -->
+  <g id="corners">
+    <g id="turn-1" class="corner-marker">
+  <circle cx="390.6" cy="104.9" r="7" fill="#09090b" stroke="#52525b" stroke-width="1.2"/>
+  <text x="390.6" y="107.7" font-size="7" font-family="monospace" font-weight="800" fill="#ffffff" text-anchor="middle">1</text>
+</g>
+  <g id="turn-2" class="corner-marker">
+  <circle cx="221.7" cy="198.0" r="7" fill="#09090b" stroke="#52525b" stroke-width="1.2"/>
+  <text x="221.7" y="200.8" font-size="7" font-family="monospace" font-weight="800" fill="#ffffff" text-anchor="middle">2</text>
+</g>
+  <g id="turn-3" class="corner-marker">
+  <circle cx="234.7" cy="157.6" r="7" fill="#09090b" stroke="#52525b" stroke-width="1.2"/>
+  <text x="234.7" y="160.4" font-size="7" font-family="monospace" font-weight="800" fill="#ffffff" text-anchor="middle">3</text>
+</g>
+  <g id="turn-4" class="corner-marker">
+  <circle cx="168.0" cy="161.7" r="7" fill="#09090b" stroke="#52525b" stroke-width="1.2"/>
+  <text x="168.0" y="164.5" font-size="7" font-family="monospace" font-weight="800" fill="#ffffff" text-anchor="middle">4</text>
+</g>
+  <g id="turn-5" class="corner-marker">
+  <circle cx="191.1" cy="176.4" r="7" fill="#09090b" stroke="#52525b" stroke-width="1.2"/>
+  <text x="191.1" y="179.20000000000002" font-size="7" font-family="monospace" font-weight="800" fill="#ffffff" text-anchor="middle">5</text>
+</g>
+  <g id="turn-6" class="corner-marker">
+  <circle cx="186.5" cy="232.8" r="7" fill="#09090b" stroke="#52525b" stroke-width="1.2"/>
+  <text x="186.5" y="235.60000000000002" font-size="7" font-family="monospace" font-weight="800" fill="#ffffff" text-anchor="middle">6</text>
+</g>
+  <g id="turn-7" class="corner-marker">
+  <circle cx="167.1" cy="287.6" r="7" fill="#09090b" stroke="#52525b" stroke-width="1.2"/>
+  <text x="167.1" y="290.40000000000003" font-size="7" font-family="monospace" font-weight="800" fill="#ffffff" text-anchor="middle">7</text>
+</g>
+  <g id="turn-8" class="corner-marker">
+  <circle cx="210.3" cy="308.1" r="7" fill="#09090b" stroke="#52525b" stroke-width="1.2"/>
+  <text x="210.3" y="310.90000000000003" font-size="7" font-family="monospace" font-weight="800" fill="#ffffff" text-anchor="middle">8</text>
+</g>
+  <g id="turn-9" class="corner-marker">
+  <circle cx="140.4" cy="342.0" r="7" fill="#09090b" stroke="#52525b" stroke-width="1.2"/>
+  <text x="140.4" y="344.8" font-size="7" font-family="monospace" font-weight="800" fill="#ffffff" text-anchor="middle">9</text>
+</g>
+  <g id="turn-10" class="corner-marker">
+  <circle cx="66.6" cy="397.3" r="7" fill="#09090b" stroke="#52525b" stroke-width="1.2"/>
+  <text x="66.6" y="400.1" font-size="7" font-family="monospace" font-weight="800" fill="#ffffff" text-anchor="middle">10</text>
+</g>
+  <g id="turn-11" class="corner-marker">
+  <circle cx="59.1" cy="378.6" r="7" fill="#09090b" stroke="#52525b" stroke-width="1.2"/>
+  <text x="59.1" y="381.40000000000003" font-size="7" font-family="monospace" font-weight="800" fill="#ffffff" text-anchor="middle">11</text>
+</g>
+  <g id="turn-12" class="corner-marker">
+  <circle cx="126.0" cy="308.6" r="7" fill="#09090b" stroke="#52525b" stroke-width="1.2"/>
+  <text x="126.0" y="311.40000000000003" font-size="7" font-family="monospace" font-weight="800" fill="#ffffff" text-anchor="middle">12</text>
+</g>
+  <g id="turn-13" class="corner-marker">
+  <circle cx="163.9" cy="204.4" r="7" fill="#09090b" stroke="#52525b" stroke-width="1.2"/>
+  <text x="163.9" y="207.20000000000002" font-size="7" font-family="monospace" font-weight="800" fill="#ffffff" text-anchor="middle">13</text>
+</g>
+  <g id="turn-14" class="corner-marker">
+  <circle cx="106.6" cy="173.3" r="7" fill="#09090b" stroke="#52525b" stroke-width="1.2"/>
+  <text x="106.6" y="176.10000000000002" font-size="7" font-family="monospace" font-weight="800" fill="#ffffff" text-anchor="middle">14</text>
+</g>
+  <g id="turn-15" class="corner-marker">
+  <circle cx="232.5" cy="95.9" r="7" fill="#09090b" stroke="#52525b" stroke-width="1.2"/>
+  <text x="232.5" y="98.7" font-size="7" font-family="monospace" font-weight="800" fill="#ffffff" text-anchor="middle">15</text>
+</g>
+  <g id="turn-16" class="corner-marker">
+  <circle cx="375.7" cy="58.6" r="7" fill="#09090b" stroke="#52525b" stroke-width="1.2"/>
+  <text x="375.7" y="61.4" font-size="7" font-family="monospace" font-weight="800" fill="#ffffff" text-anchor="middle">16</text>
+</g>
+  </g>
+</svg>
