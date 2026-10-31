@@ -52,54 +52,6 @@ driver = GraphDatabase.driver(
     keep_alive = True
 )
 
-def sanitize_ascii_diagrams(text: str) -> str:
-    """
-    Cleans raw ASCII diagrams, box drawings, and branch trees from generated output.
-    Preserves legitimate Markdown tables while stripping flowchart connectors.
-    Guarantees proper paragraph line breaks for Paddock Primer blockquotes.
-    """
-    # 1. Fix run-on Paddock Primer headers missing the blank quote line
-    text = re.sub(
-        r"(>\s*[🏎️🎙️]?\s*\**PADDOCK PRIMER[^\n\*\>]*\**)\s*(?:\n>\s*|\n\s*|:\s*)([A-Z][a-zA-Z])",
-        r"\1\n>\n> \2",
-        text
-    )
-
-    lines = text.split("\n")
-    cleaned_lines = []
-
-    # Detects ASCII and Unicode flowchart/box-drawing lines
-    # Includes standard ASCII (+, -, |, v, ^) plus Unicode box chars (─, │, ┌, ┐, └, ┘, ├, ┤, ┬, ┴, ┼, ►, ▼)
-    connector_pattern = re.compile(
-        r"^[\s\|\+\-\=\<\>\_\^v\/\\:\.─│┌┐└┘├┤┬┴┼═║╔╗╚╝╠╣╦╩╬►▼▲◄→←]+$"
-    )
-
-    for line in lines:
-        stripped = line.strip()
-
-        # Drop fences intended for text/ascii diagrams
-        if stripped in ["```text", "```ascii", "```plaintext"]:
-            continue
-
-        # Keep legitimate Markdown tables
-        if stripped.startswith("|") and stripped.endswith("|") and any(c.isalnum() for c in stripped):
-            cleaned_lines.append(line)
-            continue
-
-        # Drop lines that are purely drawn connectors, pipes, or box borders
-        if connector_pattern.match(stripped) and len(stripped) > 0:
-            continue
-
-        # Convert standalone bracketed diagram nodes (e.g., '[SQ1 Red Flag]') into clean bullets
-        bracket_match = re.match(r"^\s*\[(.*?)\]\s*$", line)
-        if bracket_match:
-            cleaned_lines.append(f"- **{bracket_match.group(1)}**")
-            continue
-
-        cleaned_lines.append(line)
-
-    return "\n".join(cleaned_lines)
-
 # 3. Model configuration & Fallback ENgine
 PRIMARY_MODEL = "gemini-3.8-flash"
 FALLBACK_MODEL = "gemini-3.5-flash-lite"
@@ -533,16 +485,11 @@ def ask_question_stream(request: QueryRequest):
                     if "\n" in line_buffer:
                         parts = line_buffer.split("\n")
                         for p in parts[:-1]:
-                            cleaned = sanitize_ascii_diagrams(p)
-                            if cleaned:
-                                yield json.dumps({"type": "token", "content": cleaned + "\n"}) + "\n"
+                            yield json.dumps({"type": "token", "content": p + "\n"}) + "\n"
                         line_buffer = parts[-1]
 
-            # Flush any remaining text in the buffer
-            if line_buffer:
-                cleaned = sanitize_ascii_diagrams(line_buffer)
-                if cleaned:
-                    yield json.dumps({"type": "token", "content": cleaned}) + "\n"
+                if line_buffer:
+                    yield json.dumps({"type": "token", "content": line_buffer}) + "\n"
 
         except Exception as err:
             import traceback
