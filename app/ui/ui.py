@@ -120,6 +120,12 @@ class State(rx.State):
             return False
         return self.queries_remaining <= 0
 
+    # Live Paddock & Race Debrief Quick-Starts
+    live_audit_queries: list[str] = [
+        "Give me an end-to-end debrief of the latest Grand Prix: the race winner, key overtakes, major mechanical failures, and any steward penalties.",
+        "What is the latest engineering controversy or tech talk in the paddock?",
+        "Reconstruct the key strategic phases and pit stop calls from the recent race.",
+    ]
 
     example_queries: list[str] = [
         # 1. Epistemic Perception Shift (Raw paddock drama & consensus flip)
@@ -1442,6 +1448,44 @@ def index() -> rx.Component:
                             margin_top="0.2rem",
                         ),
                     ),
+                ),
+                rx.text(
+                    "EXAMPLE QUERIES · RACE DEBRIEF",
+                    font_size="0.65rem",
+                    font_weight="700",
+                    letter_spacing="0.15em",
+                    color="#666666",
+                    margin_top="2rem",
+                ),
+                rx.vstack(
+                    rx.foreach(
+                        State.live_audit_queries,
+                        lambda query: rx.button(
+                            query,
+                            on_click=lambda: State.use_example(query),
+                            variant="ghost",
+                            width="100%",
+                            padding="0.4rem 0.6rem",
+                            justify_content="flex-start",
+                            text_align="left",
+                            white_space="normal",
+                            height="auto",
+                            font_size="0.78rem",
+                            line_height="1.45",
+                            color="#d4d4d8",
+                            border_left="2px solid transparent",
+                            border_radius="0px",
+                            _hover={
+                                "color": "#ffffff",
+                                "background": "#141414",
+                                "border_left": "2px solid #e10600",
+                            },
+                        ),
+                    ),
+                    align="start",
+                    spacing="2",
+                    margin_top="0.6rem",
+                    width="100%",
                 ),
                 rx.text(
                     "EXAMPLE QUERIES · 7 ARCHETYPES",
