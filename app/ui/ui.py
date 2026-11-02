@@ -295,25 +295,28 @@ class State(rx.State):
 
     @rx.var
     def current_slide_type(self) -> str:
+        # If no slides were returned, render the conversational fallback
+        if not self.slides_payload or len(self.slides_payload) == 0:
+            return "fallback"
+
         # Check explicit type first
         t = str(self.current_slide.get("type", "")).lower().strip()
-        if t in ["circuit", "chassis", "penalty", "radio"]:
+        if t in ["circuit", "chassis", "penalty", "radio", "fallback"]:
             return t
 
-        # Smart fallback based on whatever fields the LLM actually returned:
+        # Smart fallback based on whatever fields the LLM returned:
         badge = str(self.current_slide.get("badge_title", "")).lower()
-        
         if "circuit" in t or "slug" in self.current_slide or "focus_turns" in self.current_slide:
             return "circuit"
         if "chassis" in t or "team" in self.current_slide or "focus_element" in self.current_slide or "spec" in badge:
             return "chassis"
-        if "penalty" in t or "directive" in t or "ruling" in t or "decision" in self.current_slide or "incident" in self.current_slide or "directive" in badge:
+        if "penalty" in t or "directive" in t or "ruling" in t or "decision" in self.current_slide or "incident" in self.current_slide:
             return "penalty"
         if "radio" in t or "speaker" in self.current_slide or "message" in self.current_slide:
             return "radio"
 
         return "fallback"
-
+    
     @rx.var
     def current_badge_title(self) -> str:
         return self.current_slide.get("badge_title", "PIT WALL HUD")
@@ -360,67 +363,138 @@ class State(rx.State):
 
     @rx.var
     def active_circuit_css(self) -> str:
-        """Dynamically generates glowing SVG CSS for whichever turns the current slide highlights."""
+        """Dynamically generates glowing telemetry, radar pulse, and sector animations on track SVGs."""
         if self.current_slide_type != "circuit":
             return ""
         
         turns = self.current_slide.get("focus_turns", [])
-        if not turns:
-            return ""
-        
-        selectors = [f"#turn-{t} circle, [id='turn-{t}'] circle" for t in turns]
-        sel_text = [f"#turn-{t} text, [id='turn-{t}'] text" for t in turns]
-        
-        return f"""
-        {', '.join(selectors)} {{
-            stroke: #e10600 !important;
-            stroke-width: 2.8px !important;
-            fill: #e10600 !important;
-            filter: drop-shadow(0 0 10px #e10600) !important;
-            animation: f1-turn-pulse 1.8s infinite !important;
-        }}
-        {', '.join(sel_text)} {{
-            fill: #ffffff !important;
-            font-weight: 900 !important;
-        }}
-        """
+        css_rules = []
+
+        # 1. Base Circuit Telemetry Pulse (Running ghost pulse along the tarmac)
+        css_rules.append("""
+        @keyframes circuit-ghost-flow {
+            0% { stroke-dashoffset: 400; opacity: 0.6; }
+            50% { opacity: 1; }
+            100% { stroke-dashoffset: 0; opacity: 0.6; }
+        }
+        /* Targets the main circuit tarmac path if class or id is present */
+        svg path.track, svg path.circuit-track, svg path[stroke="#FFFFFF"] {
+            stroke-dasharray: 24 12 !important;
+            animation: circuit-ghost-flow 3.5s linear infinite !important;
+        }
+        """)
+
+        # 2. Keyframes for the Turn Radar Sonar Pulse
+        css_rules.append("""
+        @keyframes f1-turn-pulse {
+            0% {
+                transform: scale(0.95);
+                filter: drop-shadow(0 0 4px rgba(225, 6, 0, 0.8));
+            }
+            50% {
+                transform: scale(1.18);
+                filter: drop-shadow(0 0 14px rgba(225, 6, 0, 1));
+            }
+            100% {
+                transform: scale(0.95);
+                filter: drop-shadow(0 0 4px rgba(225, 6, 0, 0.8));
+            }
+        }
+        """)
+
+        # 3. Highlighting the Focused Turn(s)
+        if turns:
+            selectors = [f"#turn-{t} circle, [id='turn-{t}'] circle, #turn-{t}, [id='turn-{t}']" for t in turns]
+            sel_text = [f"#turn-{t} text, [id='turn-{t}'] text" for t in turns]
+            
+            css_rules.append(f"""
+            {', '.join(selectors)} {{
+                stroke: #e10600 !important;
+                stroke-width: 3.2px !important;
+                fill: #e10600 !important;
+                transform-box: fill-box !important;
+                transform-origin: center !important;
+                animation: f1-turn-pulse 1.4s ease-in-out infinite !important;
+            }}
+            {', '.join(sel_text)} {{
+                fill: #ffffff !important;
+                font-weight: 900 !important;
+                font-size: 11px !important;
+            }}
+            """)
+
+        return "\n".join(css_rules)
 
     @rx.var
     def active_chassis_css(self) -> str:
-        """Dynamically injects crimson glow on the exact CAD component + flap actuation."""
+        """Dynamically injects crimson glow and telemetry animations on CAD components."""
         if self.current_slide_type != "chassis":
             return ""
         
-        focus_elem = self.current_slide.get("focus_element", "rear-wing-assembly")
-        should_flap = self.current_slide.get("animate_flap", False)
+        focus_elem = self.current_slide.get("focus_element", "").strip()
+        should_flap = bool(self.current_slide.get("animate_flap", False)) and focus_elem == "rear-wing-assembly"
         
-        css_rules = [
-            f"""
+        css_rules = []
+
+        # 1. Component Crimson Highlight
+        if focus_elem:
+            css_rules.append(f"""
             #{focus_elem} path, #{focus_elem} rect, #{focus_elem} line {{
                 stroke: #e10600 !important;
-                stroke-width: 2.5px !important;
-                filter: drop-shadow(0 0 8px rgba(225, 6, 0, 0.85)) !important;
+                stroke-width: 2.6px !important;
+                filter: drop-shadow(0 0 10px rgba(225, 6, 0, 0.9)) !important;
+                transition: stroke 0.3s ease, filter 0.3s ease;
             }}
             #{focus_elem} text {{
                 fill: #ffffff !important;
                 font-weight: 900 !important;
             }}
-            """
-        ]
-        
-        # Inject the keyframe animation ONLY if the LLM flagged active aero / revolving wing!
+            """)
+
+        # 2. Restored Original Hinge Flap Swing
         if should_flap:
             css_rules.append("""
             @keyframes flap-swing-active {
-              0%, 100% { transform: rotate(0deg); }
-              42%, 62% { transform: rotate(-24deg); }
+              0%, 100% { 
+                transform: rotate(0deg); 
+              }
+              40%, 65% { 
+                transform: rotate(-18deg); 
+              }
             }
             #active-flap {
+              transform-box: view-box !important;
               transform-origin: 816px 118px !important;
-              animation: flap-swing-active 2.8s cubic-bezier(0.4, 0, 0.2, 1) infinite !important;
+              animation: flap-swing-active 2.4s cubic-bezier(0.4, 0, 0.2, 1) infinite !important;
             }
             """)
-            
+
+        # 3. Floor Underbody: Ground-Effect Venturi Flow Streamlines
+        if focus_elem == "floor-underbody":
+            css_rules.append("""
+            @keyframes ground-effect-flow {
+              0% { stroke-dashoffset: 60; opacity: 0.4; }
+              50% { opacity: 1; }
+              100% { stroke-dashoffset: 0; opacity: 0.4; }
+            }
+            #floor-underbody path {
+              stroke-dasharray: 8 4 !important;
+              animation: ground-effect-flow 1.2s linear infinite !important;
+            }
+            """)
+
+        # 4. Suspension: Kerb-Strike / Ride-Height Deflection Pulse
+        if "suspension" in focus_elem:
+            css_rules.append(f"""
+            @keyframes suspension-compression {{
+              0%, 100% {{ transform: translateY(0px); }}
+              50% {{ transform: translateY(-2.5px); }}
+            }}
+            #{focus_elem} {{
+              animation: suspension-compression 1.1s ease-in-out infinite !important;
+            }}
+            """)
+
         return "\n".join(css_rules)
 
     queue_version: int = 0
@@ -780,12 +854,19 @@ def slide_circuit() -> rx.Component:
 
 def slide_chassis() -> rx.Component:
     return rx.box(
-        # Dynamically injects component glow & flap swing for this slide
+        # Dynamically injects component glow & telemetry animations for this slide
         rx.html(f"<style>{State.active_chassis_css}</style>"),
 
         rx.html(
             State.active_chassis_svg,
-            style={"width": "100%", "height": "100%", "display": "flex", "alignItems": "center", "justifyContent": "center"}
+            style={
+                "width": "100%", 
+                "height": "100%", 
+                "display": "flex", 
+                "alignItems": "center", 
+                "justifyContent": "center",
+                "pointerEvents": "none",
+            }
         ),
 
         # Dynamic Hotspot Callout Pin
@@ -811,15 +892,48 @@ def slide_chassis() -> rx.Component:
             z_index="15",
         ),
 
-        # Bottom-left Team & Spec Indicator
-        rx.text(
-            State.current_chassis_footer,
-            font_size="7px",
-            font_family="monospace",
-            color="#71717a",
+        # Bottom-left Team Indicator + Consistent Hover Card
+        rx.hstack(
+            rx.text(
+                State.current_chassis_footer,
+                font_size="7px",
+                font_family="monospace",
+                color="#71717a",
+            ),
+            rx.hover_card.root(
+                rx.hover_card.trigger(
+                    rx.text(
+                        "ⓘ",
+                        color="#666666",
+                        font_size="0.8rem",
+                        cursor="help",
+                        _hover={"color": "#aaaaaa"},
+                    ),
+                ),
+                rx.hover_card.content(
+                    rx.text(
+                        "Standardized reference schematic. Component locations indicative across aerodynamic regulations.",
+                        font_size="0.7rem",
+                        line_height="1.4",
+                        color="#cccccc",
+                    ),
+                    max_width="210px",
+                    padding="0.65rem 0.8rem",
+                    background="rgba(18, 18, 18, 0.9)",
+                    backdrop_filter="blur(10px)",
+                    border="1px solid #282828",
+                    border_radius="6px",
+                    box_shadow="0 4px 16px rgba(0, 0, 0, 0.5)",
+                    side="top",
+                    align="start",
+                ),
+            ),
             position="absolute",
             bottom="8px",
             left="12px",
+            spacing="2",
+            align="center",
+            z_index="30",
         ),
         width="100%",
         height="100%",
