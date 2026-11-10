@@ -138,16 +138,19 @@ kg_pipeline = SimpleKGPipeline(
 
 # 6. Automated Sanitization and Deduplication
 def sanitize_graph(driver):
-    """Purges placeholder entities, loops, and merges aliases across drivers, GPs, and circuits."""
+    """
+    Purges placeholder entities, loops, and dynamically merges identical duplicate
+    entities and parallel edges across the entire graph without hardcoding names.
+    """
     cleanup_queries = [
-        # 1. Flatten any array names created by previous merges back to single strings
+        # 1. Flatten any array names created by prior merges back to single clean strings
         """
         MATCH (n:__Entity__)
         WHERE n.name IS NOT NULL AND n.name IS :: LIST<ANY>
         SET n.name = head(n.name);
         """,
 
-        # 2. Delete generic/placeholder entities safely (using toString to protect against unexpected types)
+        # 2. Delete generic/placeholder entities safely (case-insensitive & trimmed)
         """
         MATCH (n:__Entity__) 
         WHERE toLower(trim(toString(n.name))) IN [
@@ -160,89 +163,46 @@ def sanitize_graph(driver):
 
         # 3. Delete self-referential relationship loops
         "MATCH (n:__Entity__)-[r]->(n) DELETE r;",
-        
-        # 4. Merge Driver Aliases (keeping canonical properties intact)
+
+        # 4. GENERALIZED DEDUPLICATION: Merge ANY duplicate nodes sharing the exact same name
+        # Automatically collapses all duplicate drivers, teams, tracks, upgrades, etc.
         """
-        UNWIND [
-          {canonical: "Lewis Hamilton", aliases: ["Hamilton", "L. Hamilton", "Sir Lewis Hamilton"]},
-          {canonical: "Lando Norris", aliases: ["Norris", "L. Norris"]},
-          {canonical: "Max Verstappen", aliases: ["Verstappen", "M. Verstappen"]},
-          {canonical: "George Russell", aliases: ["Russell", "G. Russell"]},
-          {canonical: "Charles Leclerc", aliases: ["Leclerc", "C. Leclerc"]},
-          {canonical: "Fernando Alonso", aliases: ["Alonso", "Fernando"]},
-          {canonical: "Pierre Gasly", aliases: ["Gasly", "P. Gasly"]},
-          {canonical: "Carlos Sainz", aliases: ["Sainz", "Carlos", "Sainz Jr", "Carlos Sainz Jr"]},
-          {canonical: "Kimi Antonelli", aliases: ["Andrea Kimi Antonelli", "Antonelli"]},
-          {canonical: "Esteban Ocon", aliases: ["Ocon", "Esteban"]},
-          {canonical: "Valtteri Bottas", aliases: ["Bottas", "V. Bottas"]},
-          {canonical: "Sergio Perez", aliases: ["Perez", "Checo", "Checo Perez"]},
-          {canonical: "Oliver Bearman", aliases: ["Ollie Bearman", "Bearman", "Ollie"]},
-          {canonical: "Franco Colapinto", aliases: ["Colapinto", "Rafael Colapinto"]},
-          {canonical: "Alexander Albon", aliases: ["Alex Albon", "Albon"]},
-          {canonical: "Nico Hulkenberg", aliases: ["Hulkenberg", "Ulkenberg"]},
-          {canonical: "Lance Stroll", aliases: ["Stroll", "L. Stroll"]},
-          {canonical: "Gabriel Bortoleto", aliases: ["Bortoleto"]},
-          {canonical: "Isack Hadjar", aliases: ["Hadjar", "Michele Hadjar"]},
-          {canonical: "Oscar Piastri", aliases: ["Piastri", "Oscar Pisatri", "Liam Piastri"]}
-        ] AS row
-        MATCH (target:Driver {name: row.canonical})
-        MATCH (alias:Driver) WHERE alias.name IN row.aliases AND alias <> target
-        CALL apoc.refactor.mergeNodes([target, alias], {properties: {name: 'discard', `.*`: 'combine'}}) YIELD node
-        SET node.name = row.canonical
+        MATCH (n:__Entity__)
+        WHERE n.name IS NOT NULL AND NOT n:Chunk
+        WITH toLower(trim(toString(n.name))) AS normalized_name, collect(n) AS nodes
+        WHERE size(nodes) > 1
+        CALL apoc.refactor.mergeNodes(nodes, {properties: 'combine', mergeRels: true}) YIELD node
         RETURN count(node);
         """,
 
-        # 5. Merge Grand Prix Aliases
+        # 5. GENERALIZED SEASON NORMALIZATION: Automatically merges variations like "2026 Season" -> "2026"
         """
-        UNWIND [
-          {canonical: "Italian Grand Prix", aliases: ["Monza Grand Prix", "Monza GP", "F1 Italian GP", "2026 Italian Grand Prix", "Italian Grand Prix 2026", "2026 F1 Italian GP", "2024 Italian Grand Prix"]},
-          {canonical: "Dutch Grand Prix", aliases: ["Dutch GP", "Zandvoort Grand Prix", "2026 Dutch Grand Prix", "Dutch GP 2026", "2023 Dutch GP", "2026 F1 Dutch GP"]},
-          {canonical: "Azerbaijan Grand Prix", aliases: ["Baku Grand Prix", "Baku GP"]},
-          {canonical: "Spanish Grand Prix", aliases: ["Spanish GP", "Barcelona Grand Prix", "Barcelona-Catalunya Grand Prix", "2026 Spanish Grand Prix", "Spanish Grand Prix 2026"]},
-          {canonical: "British Grand Prix", aliases: ["British GP"]},
-          {canonical: "Hungarian Grand Prix", aliases: ["Hungarian GP", "Hungary Grand Prix", "Budapest Grand Prix", "2026 Hungarian Grand Prix", "Hungarian Grand Prix 2026"]},
-          {canonical: "Monaco Grand Prix", aliases: ["Monaco GP", "F1 Monaco GP 1982"]},
-          {canonical: "Japanese Grand Prix", aliases: ["Japanese GP", "Suzuka Grand Prix", "Japan Grand Prix"]},
-          {canonical: "United States Grand Prix", aliases: ["US GP", "United States GP", "Austin Grand Prix"]},
-          {canonical: "Belgian Grand Prix", aliases: ["Spa Grand Prix", "1998 Belgian GP", "Belgian Grand Prix 2026"]},
-          {canonical: "Chinese Grand Prix", aliases: ["China Grand Prix", "Shanghai Grand Prix"]},
-          {canonical: "Saudi Arabian Grand Prix", aliases: ["Saudi Arabia Grand Prix", "Jeddah Grand Prix", "2023 Saudi Arabian Grand Prix"]},
-          {canonical: "Brazilian Grand Prix", aliases: ["Brazil Grand Prix", "Brazilian Grand Prix 2024", "Brazilian Grand Prix 2025", "Brazilian Grand Prix 2021"]}
-        ] AS row
-        MATCH (target:GrandPrix {name: row.canonical})
-        MATCH (alias:GrandPrix) WHERE alias.name IN row.aliases AND alias <> target
-        CALL apoc.refactor.mergeNodes([target, alias], {properties: {name: 'discard', `.*`: 'combine'}}) YIELD node
-        SET node.name = row.canonical
+        MATCH (s:Season)
+        WHERE s.name =~ '.*\\b(19\\d{2}|20\\d{2})\\b.*' AND NOT s.name =~ '^\\d{4}$'
+        WITH s, apoc.text.regexGroups(s.name, '\\b(19\\d{2}|20\\d{2})\\b')[0][0] AS year_hub
+        MERGE (target:Season {name: year_hub})
+        WITH target, s
+        WHERE target <> s
+        CALL apoc.refactor.mergeNodes([target, s], {properties: 'combine', mergeRels: true}) YIELD node
         RETURN count(node);
         """,
 
-        # 6. Merge Circuit Aliases
+        # 6. GENERALIZED RELATIONSHIP PRUNING: Prune redundant parallel edges between the same nodes
         """
-        UNWIND [
-          {canonical: "Baku City Circuit", aliases: ["Baku Street Circuit", "Baku Circuit", "Baku"]},
-          {canonical: "Circuit Zandvoort", aliases: ["Zandvoort Circuit", "Netherlands Circuit", "Dutch Grand Prix Circuit"]},
-          {canonical: "Circuit de Monaco", aliases: ["Monaco street circuit", "Monaco Circuit"]},
-          {canonical: "Autodromo Nazionale Monza", aliases: ["Monza Circuit", "Italian Circuit"]},
-          {canonical: "Silverstone Circuit", aliases: ["British Circuit"]},
-          {canonical: "Circuit de Barcelona-Catalunya", aliases: ["Barcelona Circuit", "Barcelona-Catalunya"]},
-          {canonical: "Suzuka Circuit", aliases: ["Japanese Circuit", "Suzuka"]},
-          {canonical: "Jeddah Corniche Circuit", aliases: ["Jeddah Circuit", "Saudi Arabia Circuit"]},
-          {canonical: "Hungaroring", aliases: ["Hungarian circuit", "Hungarian Grand Prix Circuit"]}
-        ] AS row
-        MATCH (target:Circuit {name: row.canonical})
-        MATCH (alias:Circuit) WHERE alias.name IN row.aliases AND alias <> target
-        CALL apoc.refactor.mergeNodes([target, alias], {properties: {name: 'discard', `.*`: 'combine'}}) YIELD node
-        SET node.name = row.canonical
-        RETURN count(node);
+        MATCH (a:__Entity__)-[r]->(b:__Entity__)
+        WITH a, b, type(r) AS rel_type, collect(r) AS rels
+        WHERE size(rels) > 1
+        UNWIND rels[1..] AS dup
+        DELETE dup;
         """
     ]
     with driver.session(database=os.getenv("NEO4J_DATABASE", "neo4j")) as session:
-        for q in cleanup_queries:
+        for idx, q in enumerate(cleanup_queries, 1):
             try:
                 session.run(q)
             except Exception as e:
-                print(f"⚠️ Sanitization query notice: {e}")
-    print("\n🧹 Graph sanitization complete! Canonical entities merged and artifacts purged.")
+                print(f"⚠️ Sanitization query {idx} notice: {e}")
+    print("\n🧹 Graph sanitization complete! All duplicate entities and edges generalized & unified.")
 
 # 7. Ingestion Helpers
 async def ingest_large_text_safely(pipeline, full_text: str, chunk_limit: int = 4000):
