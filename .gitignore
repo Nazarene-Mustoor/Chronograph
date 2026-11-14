@@ -20,12 +20,13 @@ assets/external/
 reflex.db
 app/reflex.db
 
-# Scraped raw archives & logs (keep directory structure intact)
+# Scraped raw archives & logs (keep directory structure & URL ledger intact)
 data/raw_news/*
 !data/raw_news/.gitkeep
 data/processed_news/*
 !data/processed_news/.gitkeep
 data/*.txt
+!data/scraped_history.txt
 logs/
 *.log
 

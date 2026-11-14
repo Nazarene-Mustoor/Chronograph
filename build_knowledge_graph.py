@@ -33,13 +33,8 @@ driver = GraphDatabase.driver(
 )
 driver.verify_connectivity()
 
-# 3. Initialize Groq LLM & Gemini Embedder
-# Use 120b or llama-3.3-70b-versatile to avoid JSON truncation from smaller models
+# 3. Initialize Gemini LLM & Gemini Embedder
 llm = OpenAILLM(
-    # model_name="openai/gpt-oss-120b", 
-    # model_params={"temperature": 0.0},
-    # api_key=os.getenv("GROQ_API_KEY"),
-    # base_url="https://api.groq.com/openai/v1", 
     model_name="gemini-3.5-flash-lite",
     base_url="https://generativelanguage.googleapis.com/v1beta/openai/",
     api_key=os.getenv("GEMINI_API_KEY")
@@ -51,7 +46,8 @@ embedder = GeminiEmbedder(
     api_key=os.getenv("GEMINI_API_KEY")
 )
 
-text_splitter = FixedSizeSplitter(chunk_size=2500, chunk_overlap=150)
+# 4500 char chunks so standard articles require only 1 LLM extraction pass
+text_splitter = FixedSizeSplitter(chunk_size=4500, chunk_overlap=200)
 
 # 4. Define F1 Schema with Explicit Canonical Guidance
 NODE_TYPES = [
@@ -140,7 +136,7 @@ kg_pipeline = SimpleKGPipeline(
 def sanitize_graph(driver):
     """
     Purges placeholder entities, loops, and dynamically merges identical duplicate
-    entities and parallel edges across the entire graph without hardcoding names.
+    entities, duplicate chunk clones, and parallel edges across the entire graph.
     """
     cleanup_queries = [
         # 1. Flatten any array names created by prior merges back to single clean strings
@@ -165,7 +161,6 @@ def sanitize_graph(driver):
         "MATCH (n:__Entity__)-[r]->(n) DELETE r;",
 
         # 4. GENERALIZED DEDUPLICATION: Merge ANY duplicate nodes sharing the exact same name
-        # Automatically collapses all duplicate drivers, teams, tracks, upgrades, etc.
         """
         MATCH (n:__Entity__)
         WHERE n.name IS NOT NULL AND NOT n:Chunk
@@ -194,6 +189,23 @@ def sanitize_graph(driver):
         WHERE size(rels) > 1
         UNWIND rels[1..] AS dup
         DELETE dup;
+        """,
+
+        # 7. SAFE CHUNK DEDUPLICATION: Keep 1 original copy (chunks[0]), delete exact text clones (chunks[1..])
+        """
+        MATCH (c:Chunk)
+        WHERE c.text IS NOT NULL
+        WITH trim(c.text) AS exact_text, collect(c) AS chunks
+        WHERE size(chunks) > 1
+        UNWIND chunks[1..] AS duplicate_chunk
+        DETACH DELETE duplicate_chunk;
+        """,
+
+        # 8. ORPHAN DOCUMENT CLEANUP: Remove empty Document shells that no longer link to any Chunk
+        """
+        MATCH (d:Document)
+        WHERE NOT (d)--(:Chunk)
+        DETACH DELETE d;
         """
     ]
     with driver.session(database=os.getenv("NEO4J_DATABASE", "neo4j")) as session:
@@ -202,25 +214,13 @@ def sanitize_graph(driver):
                 session.run(q)
             except Exception as e:
                 print(f"⚠️ Sanitization query {idx} notice: {e}")
-    print("\n🧹 Graph sanitization complete! All duplicate entities and edges generalized & unified.")
+    print("\n🧹 Graph sanitization complete! All duplicate entities, chunk clones, and edges unified.")
 
 # 7. Ingestion Helpers
-async def ingest_large_text_safely(pipeline, full_text: str, chunk_limit: int = 4000):
-    """Slices documents into safe windows and pauses to respect API token boundaries."""
-    if len(full_text) <= chunk_limit:
-        await pipeline.run_async(text=full_text)
-        return
-
-    slices = [full_text[i:i + chunk_limit] for i in range(0, len(full_text), chunk_limit)]
-    print(f"  📄 Document is large ({len(full_text)} chars) -> Split into {len(slices)} throttled batches.")
-
-    for idx, batch_text in enumerate(slices, 1):
-        print(f"  ↳ Ingesting batch {idx}/{len(slices)} ({len(batch_text)} chars)...")
-        await pipeline.run_async(text=batch_text)
-        
-        if idx < len(slices):
-            print("  ⏳ Pausing 15s for Gemini TPM bucket recharge...")
-            await asyncio.sleep(15)
+async def ingest_large_text_safely(pipeline, full_text: str, max_chars: int = 9000):
+    """Caps extreme long-form articles and lets SimpleKGPipeline chunk natively in one pass."""
+    trimmed_text = full_text[:max_chars]
+    await pipeline.run_async(text=trimmed_text)
 
 # 8. Main Execution
 async def run_kg_pipeline():

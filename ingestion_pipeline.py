@@ -33,24 +33,38 @@ def slugify(text: str) -> str:
     return re.sub(r"[-\s]+", "_", text).strip("_")
 
 
-def get_history() -> set:
-    """Loads all previously scraped URLs to avoid redundant fetches."""
+def get_history() -> tuple[set, list[dict]]:
+    """Loads all previously scraped URLs and headlines (supports both old URL-only and new pipe-delimited formats)."""
+    seen_urls = set()
+    seen_headlines = []
     if not os.path.exists(HISTORY_FILE):
-        return set()
+        return seen_urls, seen_headlines
+
     with open(HISTORY_FILE, "r", encoding="utf-8") as f:
-        return set(line.strip() for line in f if line.strip())
+        for line in f:
+            line = line.strip()
+            if not line:
+                continue
+            parts = [p.strip() for p in line.split("|")]
+            seen_urls.add(parts[0])
+            if len(parts) >= 3:
+                seen_headlines.append({"pub_date": parts[1], "title": parts[2]})
+    return seen_urls, seen_headlines
 
 
-def append_history(url: str):
-    """Appends a newly scraped article URL to the history log."""
+def append_history(url: str, pub_date: str = "", title: str = ""):
+    """Appends a newly scraped article URL, date, and title to the persistent history log."""
+    clean_title = title.replace("|", "-").replace("\n", " ").strip()
     with open(HISTORY_FILE, "a", encoding="utf-8") as f:
-        f.write(url + "\n")
+        if pub_date and clean_title:
+            f.write(f"{url} | {pub_date} | {clean_title}\n")
+        else:
+            f.write(f"{url}\n")
 
 
 def normalize_title(title: str) -> str:
     """Normalizes headline by removing non-alphanumeric chars and generic F1 filler words."""
     cleaned = title.lower()
-    # Strip common filler tokens that artificially inflate similarity across different F1 stories
     fillers = [
         "formula 1",
         "formula-1",
@@ -77,50 +91,37 @@ def is_duplicate_story(
         return False
 
     for target in accepted_targets:
-        # Only compare stories published within the same 48h timeframe
         if target["pub_date"] == candidate_date:
             norm_target = normalize_title(target["title"])
-            similarity = SequenceMatcher(
-                None, norm_cand, norm_target
-            ).ratio()
-            # If 55%+ overlap in core headline keywords, consider it the same story
+            similarity = SequenceMatcher(None, norm_cand, norm_target).ratio()
             if similarity > 0.55:
                 return True
     return False
 
 
-def discover_article_targets(per_source_limit: int = 5) -> list[dict]:
+def discover_article_targets(per_source_limit: int = 3) -> list[dict]:
     """Pulls candidate F1 articles across RSS feeds with cross-source deduplication."""
-    seen_urls = get_history()
+    seen_urls, existing_headlines = get_history()
     collected_by_source = {src: [] for src in RSS_FEEDS}
 
-    # Also inspect existing files in raw_news to avoid re-scraping across script restarts
-    # Check BOTH raw_news and processed_news so you never re-fetch past stories
-    existing_headlines = []
     for folder in [RAW_DIR, PROCESSED_DIR]:
         if os.path.exists(folder):
             for fname in os.listdir(folder):
                 if fname.endswith(".txt"):
                     try:
-                        with open(
-                            os.path.join(folder, fname), "r", encoding="utf-8"
-                        ) as f:
+                        with open(os.path.join(folder, fname), "r", encoding="utf-8") as f:
                             lines = [f.readline() for _ in range(3)]
-                            p_date = ""
-                            h_line = ""
+                            p_date, h_line = "", ""
                             for l in lines:
                                 if l.startswith("PUBLICATION_DATE:"):
                                     p_date = l.split(":", 1)[1].strip()
                                 elif l.startswith("HEADLINE:"):
                                     h_line = l.split(":", 1)[1].strip()
                             if h_line and p_date:
-                                existing_headlines.append(
-                                    {"title": h_line, "pub_date": p_date}
-                                )
+                                existing_headlines.append({"title": h_line, "pub_date": p_date})
                     except Exception:
                         pass
 
-    # Global pool of accepted items to prevent duplicates across different outlets
     global_accepted = list(existing_headlines)
 
     for source_name, feed_url in RSS_FEEDS.items():
@@ -133,37 +134,36 @@ def discover_article_targets(per_source_limit: int = 5) -> list[dict]:
                 if not link or link in seen_urls:
                     continue
 
-                # Filter out paywalled Autosport Plus articles and media hubs
+                # Filter out paywalled articles, live blogs, and non-technical fluff
                 if any(
-                    bad in link.lower()
+                    bad in link.lower() or bad in title.lower()
                     for bad in [
                         "autosport-plus",
                         "/plus/",
                         "/video/",
                         "/podcast/",
                         "/live/",
+                        "quiz",
+                        "f1 24",
+                        "f1 25",
+                        "watch live",
+                        "start time",
+                        "tv schedule",
+                        "weather forecast",
                     ]
                 ):
                     continue
 
-                # Filter out non-F1 articles on motorsport-wide feeds
                 if source_name == "the_race" and not any(
                     k in link.lower() or k in title.lower()
                     for k in ["f1", "formula-1", "grand-prix"]
                 ):
                     continue
 
-                # Extract publication date
                 pub_date = datetime.now().strftime("%Y-%m-%d")
-                if (
-                    hasattr(entry, "published_parsed")
-                    and entry.published_parsed
-                ):
-                    pub_date = datetime(*entry.published_parsed[:6]).strftime(
-                        "%Y-%m-%d"
-                    )
+                if hasattr(entry, "published_parsed") and entry.published_parsed:
+                    pub_date = datetime(*entry.published_parsed[:6]).strftime("%Y-%m-%d")
 
-                # Check if this breaking story has already been accepted from another outlet
                 if is_duplicate_story(title, pub_date, global_accepted):
                     continue
 
@@ -176,7 +176,6 @@ def discover_article_targets(per_source_limit: int = 5) -> list[dict]:
         except Exception as e:
             print(f"⚠️ RSS read error ({source_name}): {e}")
 
-    # Interleave sources in balanced round-robin order
     balanced = []
     for i in range(per_source_limit):
         for src in RSS_FEEDS:
@@ -197,29 +196,17 @@ def fetch_and_save_article(target: dict) -> bool:
             return False
 
         soup = BeautifulSoup(res.content, "html.parser")
-
-        # Fallback to headline tag if feed title is empty
         h1 = soup.find("h1")
-        headline = (
-            h1.get_text().strip()
-            if h1
-            else target["title"] or url.split("/")[-1]
-        )
+        headline = h1.get_text().strip() if h1 else target["title"] or url.split("/")[-1]
 
-        # Extract article body paragraphs
         paragraphs = []
         for p in soup.find_all("p"):
             txt = p.get_text().strip()
-            if (
-                len(txt) > 30
-                and not txt.startswith("©")
-                and "cookie" not in txt.lower()
-            ):
+            if len(txt) > 30 and not txt.startswith("©") and "cookie" not in txt.lower():
                 paragraphs.append(txt)
 
         body_text = "\n\n".join(paragraphs)
 
-        # Discard stubs or paywall blocks
         if len(body_text) < 400:
             return False
 
@@ -236,7 +223,7 @@ def fetch_and_save_article(target: dict) -> bool:
         with open(file_path, "w", encoding="utf-8") as f:
             f.write(full_content)
 
-        append_history(url)
+        append_history(url, pub_date, headline)
         print(f"💾 Saved [{pub_date}]: {headline[:45]}...")
         return True
 
@@ -245,9 +232,9 @@ def fetch_and_save_article(target: dict) -> bool:
         return False
 
 
-def run_ingestion_pipeline(max_articles: int = 10):
+def run_ingestion_pipeline(max_articles: int = 6):
     print("🏎️ Chronograph Web Ingestion Engine Active.")
-    targets = discover_article_targets(per_source_limit=4)
+    targets = discover_article_targets(per_source_limit=3)
     print(f"📡 Found {len(targets)} unique candidate targets across RSS feeds.")
 
     saved = 0

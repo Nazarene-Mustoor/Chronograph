@@ -2,8 +2,12 @@ name: Chronograph Daily Knowledge Graph Update
 
 on:
   schedule:
-  - cron: '30 17 * * *'
+    # Runs at 17:30 UTC (11:00 PM IST) on Sun, Mon, Wed, Fri
+    - cron: '30 17 * * 0,1,3,5'
   workflow_dispatch:
+
+permissions:
+  contents: write
 
 jobs:
   ingest:
@@ -30,3 +34,12 @@ jobs:
           NEO4J_PASSWORD: ${{ secrets.NEO4J_PASSWORD }}
           NEO4J_DATABASE: ${{ secrets.NEO4J_DATABASE }}
         run: python orchestrator.py
+
+      - name: Persist scraped_history.txt Ledger to Repo
+        run: |
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+          if [ -f data/scraped_history.txt ]; then
+            git add -f data/scraped_history.txt
+            git diff --staged --quiet || (git commit -m "chore: update scraped_history.txt ledger [skip ci]" && git push)
+          fi
