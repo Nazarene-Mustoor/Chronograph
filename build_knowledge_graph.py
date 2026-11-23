@@ -122,7 +122,7 @@ kg_pipeline = SimpleKGPipeline(
     embedder=embedder,
     text_splitter=text_splitter,
     from_file=False, 
-    perform_entity_resolution=True,
+    perform_entity_resolution=False,  # Disable auto entity resolution for now
     on_error="IGNORE",
     schema={
         "node_types": NODE_TYPES,            
