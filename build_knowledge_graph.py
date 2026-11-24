@@ -37,7 +37,11 @@ driver.verify_connectivity()
 llm = OpenAILLM(
     model_name="gemini-3.5-flash-lite",
     base_url="https://generativelanguage.googleapis.com/v1beta/openai/",
-    api_key=os.getenv("GEMINI_API_KEY")
+    api_key=os.getenv("GEMINI_API_KEY"),
+    model_params={
+        "temperature": 0.0,
+        "reasoning_effort": "minimal",
+    }
 )
 llm.supports_structured_output = False
 
@@ -122,7 +126,7 @@ kg_pipeline = SimpleKGPipeline(
     embedder=embedder,
     text_splitter=text_splitter,
     from_file=False, 
-    perform_entity_resolution=False,  # Disable auto entity resolution for now
+    perform_entity_resolution=True,
     on_error="IGNORE",
     schema={
         "node_types": NODE_TYPES,            
